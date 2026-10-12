@@ -8,9 +8,7 @@ touch $LOG_FILE
 
 # Apply database migrations (SQLite, stored in $DATA_DIR)
 echo "Applying database migrations..."
-python manage.py makemigrations app --noinput
 python manage.py migrate --noinput
-python manage.py collectstatic --noinput > /dev/null
 
 # Start the application
 echo "Starting application..."

@@ -1,81 +1,53 @@
 # 📱 YT Navigator on Android
 
-Everything runs on the phone:
+YT Navigator is a single Android app. The whole server (Django + SQLite) is bundled inside the APK with
+[Chaquopy](https://chaquo.com/chaquopy/) and runs on the phone. Only the AI calls go to the internet:
+**Groq** (chat) and **Cohere** (search).
 
-- **Termux** runs the YT Navigator server (Django + SQLite) on `http://127.0.0.1:8000`.
-- The **YT Navigator app** (a small WebView APK) starts that server through Termux and shows it full screen.
-- Only the AI calls go to the internet: **Groq** (chat models) and **Cohere** (embeddings + reranking). No ML model runs on the phone.
+## For clients: install and use
 
-Target device: Samsung Galaxy S21. Any Android 8+ phone with ~1.5 GB of free storage should work.
+1. Download `yt-navigator.apk` (you receive it from the app owner).
+2. Tap it and allow *Install unknown apps* when Android asks.
+3. Open **YT Navigator**. There is no account to create.
+4. **Home**: paste a YouTube channel link, then scan its videos (start with ~10).
+5. **Chat**: ask questions about the videos; answers link to the exact moments.
+   **Search**: find the passages that talk about a topic.
 
-## 1. Get the API keys (free)
+The app comes with built-in API keys. To use your own free keys instead, open **Settings** and paste a
+[Groq key](https://console.groq.com/keys) and/or a [Cohere key](https://dashboard.cohere.com/api-keys).
 
-| Service | Used for | Where |
-|---|---|---|
-| Groq | Chat answers | https://console.groq.com/keys |
-| Cohere | Semantic search (embeddings + rerank) | https://dashboard.cohere.com/api-keys |
+Requirements: Android 8 or newer, an internet connection, ~150 MB of free storage.
 
-Cohere trial keys are free but rate-limited, which is fine for personal use. Without a working Cohere key the search still works, using keywords only.
+## For the app owner: build the APK
 
-## 2. Install Termux
+The APK is built by GitHub Actions (`.github/workflows/android-apk.yml`) on every push that changes the app.
 
-Install Termux from **F-Droid** (https://f-droid.org/packages/com.termux/) or its GitHub releases.
-Do **not** use the Play Store version: it is outdated and cannot install packages.
+1. **Built-in keys**: in the GitHub repository open *Settings → Secrets and variables → Actions* and add two
+   repository secrets: `GROQ_API_KEY` and `COHERE_API_KEY`. Without them the app still works, but each client
+   has to enter keys in Settings.
+2. **Build**: push a change, or open *Actions → Build Android APK → Run workflow*.
+3. **Download**: open the finished run → *Artifacts* → `yt-navigator-apk` (a zip containing `yt-navigator.apk`).
+   The run also installs the APK on an Android emulator and checks that the app starts (`smoke-test-output`
+   has a screenshot and the log).
 
-Then, on the S21: *Settings → Apps → Termux → Battery → Unrestricted*, so Android doesn't kill the server in the background.
+> ⚠️ Keys built into an APK can be extracted by anyone who has the file, and all clients share your quota.
+> Use keys with spending limits, rotate them if the APK leaks, and share the APK only with your clients.
 
-## 3. Install YT Navigator inside Termux
-
-Open Termux and run:
-
-```bash
-pkg update -y && pkg install -y git
-git clone -b claude/app-summary-b0454r https://github.com/meruem861/YT-Navigator
-cd YT-Navigator
-bash mobile/termux-setup.sh
-```
-
-If the repository is private, `git clone` asks for a username and password: use your GitHub username and a
-[personal access token](https://github.com/settings/tokens) (with read access to the repository) as the password.
-
-The script installs Python and the Rust toolchain, builds the Python packages, asks for your two API keys, creates the database and enables the link with the Android app.
-**The first install compiles a few packages and takes 20–40 minutes.** Keep the screen on and Termux open.
-
-Start the server at any time with:
-
-```bash
-ytnav
-```
-
-## 4. Install the YT Navigator app (APK)
-
-The APK is built by GitHub Actions (`.github/workflows/android-apk.yml`):
-
-1. On GitHub, open the repository → **Actions** → **Build Android APK** (if Actions are disabled on your fork, click *Enable* first; you can also start a build with *Run workflow*).
-2. Open the latest successful run → **Artifacts** → download **yt-navigator-apk** (a zip).
-3. Extract the zip with *My Files* and tap `yt-navigator.apk`. Allow *Install unknown apps* for your browser / My Files when asked.
-
-Install Termux **before** the APK, otherwise Android can't grant the app its Termux permission (if that happens, uninstall and reinstall the APK).
-
-On first launch, allow **"Run commands in Termux environment"**. From then on, tapping the YT Navigator icon starts the server automatically (it can take ~10 s) and opens the app.
-YouTube links open in the YouTube app.
-
-> No APK? Run `ytnav` in Termux, open `http://127.0.0.1:8000` in Chrome, then *⋮ → Add to Home screen*.
-
-## Everyday use
-
-| Task | How |
-|---|---|
-| Start | Tap the YT Navigator icon (or run `ytnav` in Termux) |
-| Stop | In the Termux notification tap *Exit*, or `pkill -f uvicorn` |
-| Update | `cd ~/YT-Navigator && git pull && .venv/bin/pip install -e .`, then restart |
-| Change keys / models | Edit `~/YT-Navigator/.env` (`nano .env`), then restart |
-| Your data | `~/YT-Navigator/data/` (`db.sqlite3` = channels, videos, transcripts; `checkpoints.sqlite3` = chat history) |
+Each build is signed with a temporary debug key, so installing a new build over an old one can fail with
+"App not installed": uninstall the old version first (this deletes its data). Ask if you want a permanent
+signing key for smooth updates or a Play Store release.
 
 ## Troubleshooting
 
-- **"Server not running" in the app**: open Termux and run `ytnav` to see the error. If the app never manages to start it, check that `~/.termux/termux.properties` contains `allow-external-apps = true` and run `termux-reload-settings`.
-- **A package fails to build during setup**: run `pkg upgrade -y` and then `bash mobile/termux-setup.sh` again; already-built packages are reused.
-- **Scanning finds 0 transcripts**: YouTube sometimes blocks transcript requests. Try again later or on another network (Wi-Fi vs mobile data).
-- **Chat says a model was not found**: Groq retires models from time to time. Set `INSTANT_LLM` / `POWERFUL_LLM` in `.env` to models listed on https://console.groq.com/docs/models.
-- **Search results look wrong after changing `EMBEDDING_MODEL`**: delete the videos and scan them again, so all embeddings come from the same model.
+- **"Could not start YT Navigator"**: tap Retry. If it keeps failing, send the message shown on screen.
+- **Scanning finds 0 transcripts**: the videos have no captions, or YouTube is temporarily blocking transcript
+  requests. Try again later or on another network (Wi-Fi vs mobile data).
+- **Chat says a model was not found**: Groq retires models from time to time. Update `INSTANT_LLM` /
+  `POWERFUL_LLM` in `yt_navigator/settings.py` (see https://console.groq.com/docs/models) and rebuild.
+- **Chat or search says a key is missing or invalid**: add or replace the key in Settings.
+
+## Alternative for developers: run the server in Termux
+
+`mobile/termux-setup.sh` installs the same server in [Termux](https://f-droid.org/packages/com.termux/)
+(`bash mobile/termux-setup.sh`, then `ytnav`, then open http://127.0.0.1:8000 in Chrome). This is handy for
+trying changes on the phone without rebuilding the APK.

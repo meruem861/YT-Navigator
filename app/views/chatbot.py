@@ -5,12 +5,11 @@ import traceback
 import structlog
 from asgiref.sync import sync_to_async
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
-from app.services.agent.main_graph import get_graph_instance
+from app.services.agent import get_agent
 
 logger = structlog.get_logger(__name__)
 
@@ -22,8 +21,7 @@ async def chatbot_page(request):
     channel = await sync_to_async(lambda: request.user.channel)()
     user_id = await sync_to_async(lambda: str(request.user.id))()
 
-    graph = await get_graph_instance()
-    chat_history = await graph.get_chat_history(user_id)
+    chat_history = await get_agent().get_chat_history(user_id)
 
     try:
         return render(
@@ -57,11 +55,13 @@ async def send_message(request):
     try:
         # Get user channel using sync_to_async to avoid async database access
         user_channel = await sync_to_async(lambda: user.channel)()
+        if not user_channel:
+            return JsonResponse(
+                {"error": True, "response": "Connect a YouTube channel on the Home page first."},
+                status=400,
+            )
 
-        # Get graph instance for the current event loop
-        graph = await get_graph_instance()
-
-        response = await graph.process_message(
+        response = await get_agent().process_message(
             message=message,
             channel=user_channel,
             user=user,
@@ -97,8 +97,7 @@ async def clear_chat_history(request):
     user_id = await sync_to_async(lambda: str(request.user.id))()
 
     try:
-        graph = await get_graph_instance()
-        await graph.clear_chat_history(user_id)
+        await get_agent().clear_chat_history(user_id)
         return JsonResponse({"success": True})
 
     except Exception as e:

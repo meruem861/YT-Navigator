@@ -18,6 +18,7 @@ from .views import (
     register_view,
     scan_channel,
     send_message,
+    settings_view,
 )
 
 app_name = "app"
@@ -42,4 +43,6 @@ urlpatterns = [
     path("chatbot/", chatbot_page, name="chatbot_page"),
     path("send-message/", send_message, name="send_message"),
     path("clear-chat-history/", clear_chat_history, name="clear_chat_history"),
+    # settings (API keys)
+    path("settings/", settings_view, name="settings"),
 ]

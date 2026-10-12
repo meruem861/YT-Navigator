@@ -2,12 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Lets the app ask Termux to start the local server (requires allow-external-apps in Termux) -->
-    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-
-    <queries>
-        <package android:name="com.termux" />
-    </queries>
 
     <application
         android:allowBackup="true"

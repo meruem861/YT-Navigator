@@ -63,11 +63,13 @@
             <a href="{% url 'app:home' %}" class="text-muted-text-color hover:text-white transition-colors">Home</a>
             <a href="{% url 'app:query_page' %}" class="text-muted-text-color hover:text-white transition-colors">Query</a>
             <a href="{% url 'app:chatbot_page' %}" class="text-muted-text-color hover:text-white transition-colors">Chatbot</a>
+            <a href="{% url 'app:settings' %}" class="text-muted-text-color hover:text-white transition-colors">Settings</a>
           </div>
 
           <!-- User Menu -->
           <div class="flex items-center space-x-4">
-            {% if user.is_authenticated %}
+            {% if single_user_mode %}
+            {% elif user.is_authenticated %}
               <a href="{% url 'app:profile' %}" class="text-muted-text-color hover:text-white transition-colors">
                 {{ user.username }}
               </a>
@@ -90,7 +92,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="container mx-auto px-4 pt-20 pb-8">
+    <main class="container mx-auto px-4 pt-20 pb-24 md:pb-8">
       {% if messages %}
         {% for message in messages %}
           <div class="mb-4 p-4 rounded-md {% if message.tags == 'error' %}bg-red-800 text-red-100{% else %}bg-green-800 text-green-100{% endif %}">
@@ -102,6 +104,28 @@
       {% block content %}
       {% endblock content %}
     </main>
+
+    <!-- Bottom navigation on phones (the top links are hidden on small screens) -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-yt-black border-t border-yt-gray">
+      <div class="grid grid-cols-4 h-14 text-xs">
+        {% url 'app:home' as home_url %}
+        {% url 'app:query_page' as query_url %}
+        {% url 'app:chatbot_page' as chat_url %}
+        {% url 'app:settings' as settings_url %}
+        <a href="{{ home_url }}" class="flex flex-col items-center justify-center {% if request.path == home_url %}text-white{% else %}text-muted-text-color{% endif %}">
+          <i class="fas fa-home text-lg"></i><span>Home</span>
+        </a>
+        <a href="{{ query_url }}" class="flex flex-col items-center justify-center {% if request.path == query_url %}text-white{% else %}text-muted-text-color{% endif %}">
+          <i class="fas fa-search text-lg"></i><span>Search</span>
+        </a>
+        <a href="{{ chat_url }}" class="flex flex-col items-center justify-center {% if request.path == chat_url %}text-white{% else %}text-muted-text-color{% endif %}">
+          <i class="fas fa-comments text-lg"></i><span>Chat</span>
+        </a>
+        <a href="{{ settings_url }}" class="flex flex-col items-center justify-center {% if request.path == settings_url %}text-white{% else %}text-muted-text-color{% endif %}">
+          <i class="fas fa-cog text-lg"></i><span>Settings</span>
+        </a>
+      </div>
+    </nav>
 
     <!-- Footer -->
     <footer class="bg-yt-black border-t border-yt-gray mt-auto">

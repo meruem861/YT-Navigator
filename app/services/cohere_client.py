@@ -15,6 +15,8 @@ import numpy as np
 import structlog
 from django.conf import settings
 
+from app.services.app_settings import aget_value
+
 logger = structlog.get_logger(__name__)
 
 InputType = Literal["search_document", "search_query"]
@@ -31,25 +33,26 @@ class CohereClient:
         """Initialize the client.
 
         Args:
-            api_key: Cohere API key, defaults to settings.COHERE_API_KEY.
+            api_key: Cohere API key, defaults to the key saved in Settings or the built-in one.
             base_url: Cohere API base URL, defaults to settings.COHERE_API_URL.
             timeout: Request timeout in seconds.
         """
-        self.api_key = api_key or settings.COHERE_API_KEY
+        self.api_key = api_key
         self.base_url = (base_url or settings.COHERE_API_URL).rstrip("/")
         self.timeout = timeout
 
     async def _post(self, path: str, payload: dict) -> dict:
         """Send a POST request to the Cohere API and return the JSON response."""
-        if not self.api_key:
-            raise CohereError("COHERE_API_KEY is not set")
+        api_key = self.api_key or await aget_value("COHERE_API_KEY")
+        if not api_key:
+            raise CohereError("No Cohere API key set. Add one in Settings.")
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/{path}",
                 json=payload,
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },

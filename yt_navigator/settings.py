@@ -1,6 +1,7 @@
 """Settings for the yt_navigator app."""
 
 import os
+import secrets
 from pathlib import Path
 
 import structlog
@@ -14,15 +15,13 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Ensure logs directory exists
-logs_dir = os.path.join(BASE_DIR, "logs")
+logs_dir = os.getenv("LOGS_DIR", os.path.join(BASE_DIR, "logs"))
 os.makedirs(logs_dir, exist_ok=True)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
@@ -53,7 +52,11 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "yt_navigator.middlewares.request_logging_middleware.RequestLoggingMiddleware",
+    "yt_navigator.middlewares.single_user_middleware.SingleUserMiddleware",
 ]
+
+# Single-user mode (Android app): no accounts, everyone using the app is logged in as one local user.
+SINGLE_USER_MODE = os.getenv("SINGLE_USER_MODE", "False").lower() in ("1", "true", "yes")
 
 ROOT_URLCONF = "yt_navigator.urls"
 
@@ -69,6 +72,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "app.context_processors.version_context",
+                "app.context_processors.single_user_context",
             ],
         },
     },
@@ -84,6 +88,17 @@ WSGI_APPLICATION = "yt_navigator.wsgi.application"
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 
+
+def _load_or_create_secret_key(path: Path) -> str:
+    """Return the secret key stored in DATA_DIR, creating it on first run (the phone app has no .env)."""
+    if not path.exists():
+        path.write_text(secrets.token_urlsafe(50))
+    return path.read_text().strip()
+
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or _load_or_create_secret_key(DATA_DIR / "secret_key")
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -95,9 +110,6 @@ DATABASES = {
         },
     }
 }
-
-# Chat history (LangGraph checkpoints) is kept in its own SQLite file to avoid lock contention.
-CHECKPOINT_DB_PATH = DATA_DIR / "checkpoints.sqlite3"
 
 
 # Password validation
@@ -141,6 +153,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Serve static files straight from the app folders, so no collectstatic step is needed (e.g. inside the APK)
+WHITENOISE_USE_FINDERS = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -204,6 +218,10 @@ LOGGING = {
         },
     },
 }
+
+# API keys below are the built-in defaults; users can override them from the Settings page.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1")
 
 # Cohere (https://dashboard.cohere.com/) provides embeddings and reranking, so no ML model runs on the device
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")

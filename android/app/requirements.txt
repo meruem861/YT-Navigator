@@ -1,0 +1,14 @@
+# Python packages bundled into the APK (Chaquopy). Keep in sync with pyproject.toml.
+# Everything is pure Python except numpy, which Chaquopy provides prebuilt for Android.
+django==5.1.7
+uvicorn==0.34.0
+whitenoise==6.9.0
+numpy==1.26.2
+rank_bm25==0.2.2
+python-dotenv==1.0.1
+structlog==25.1.0
+youtube-transcript-api==0.6.3
+scrapetube==2.5.1
+bs4==0.0.2
+httpx==0.28.1
+markdown2==2.5.3

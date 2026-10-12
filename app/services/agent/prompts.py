@@ -1,6 +1,24 @@
-"""This module contains the prompts for the YTGraphAgent."""
+"""This module contains the prompts for the channel assistant."""
 
-from langchain_core.prompts import PromptTemplate
+ANSWER_FORMAT_INSTRUCTIONS = """Respond with a single JSON object with exactly these keys:
+{
+  "placeholder": "<a user-friendly answer in Markdown, based on the results found>",
+  "videos": [
+    {
+      "id": "<video id from the tool results, e.g. vxKimq_y0N5>",
+      "title": "<video title>",
+      "thumbnail_url": "<real YouTube thumbnail url of the video from the tool results>",
+      "description": "<why this video is relevant to the conversation>",
+      "timestamps": [{"start": "HH:MM:SS", "end": "HH:MM:SS", "description": "<why this segment is relevant>"}]
+    }
+  ]
+}
+"videos" lists at most 5 videos that actually exist in the channel according to the tool results; never invent videos.
+Use an empty list when no video is relevant."""
+
+ROUTER_FORMAT_INSTRUCTIONS = (
+    """Respond with a single JSON object: {"answer": "Yes"} or {"answer": "No"} or {"answer": "Not relevant"}."""
+)
 
 SYSTEM_PROMPT_TEMPLATE = """**Name:** YTNavigator
 **Role:** Expert YouTube Assistant | Friendly AI Guide
@@ -91,4 +109,7 @@ Channel:
 ```{channel}```
 
 User:
-```{user}```"""
+```{user}```
+
+**# FINAL ANSWER FORMAT:**
+{format_instructions}"""

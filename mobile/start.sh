@@ -13,10 +13,8 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-# Pick up model changes after a `git pull`
-python manage.py makemigrations app --noinput > /dev/null
+# Apply database changes after a `git pull`
 python manage.py migrate --noinput > /dev/null
-python manage.py collectstatic --noinput > /dev/null
 
 # Keep Android from suspending the server while the screen is off
 termux-wake-lock 2>/dev/null || true

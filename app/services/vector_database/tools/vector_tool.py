@@ -9,19 +9,17 @@ from typing import (
 
 import numpy as np
 from asgiref.sync import sync_to_async
-from langchain_core.documents import Document
-from langchain_core.tools import StructuredTool
 from structlog import get_logger
 
 from app.models import Video
 from app.schemas import (
     ChunkSchema,
     QueryVectorStoreResponse,
-    VectorDatabaseToolInput,
     VideoSchema,
 )
 from app.services.chunks_reranker import ChunksReRanker
 from app.services.vector_database import (
+    Document,
     VectorDatabaseService,
     VectorRetriever,
     get_avg_score,
@@ -309,20 +307,34 @@ class VectorDatabaseTools:
         return QueryVectorStoreResponse(chunks=standardized_chunks, videos=unique_videos)
 
     @classmethod
-    def tool(cls) -> StructuredTool:
-        """Create a structured tool for searching videos."""
-        return StructuredTool.from_function(
-            coroutine=cls.similarity_videos_search,
-            name="similarity_videos_search",
-            description="Advanced semantic video search tool powered by vector embeddings. Use this tool to: "
-            "- Find videos that match the semantic meaning of your query, not just exact keywords "
-            "- Discover relevant video content across different topics and contexts "
-            "- Retrieve video chunks that closely align with the intent of your search "
-            "- Explore nuanced connections between search queries and video content "
-            "- Get an Idea about the Channel's content"
-            "Ideal for complex information retrieval tasks that require understanding context, "
-            "subtext, and deeper semantic relationships in video transcripts."
-            "The tool may return some irrelevant results, your task is to provide the user with the most relevant ones",
-            args_schema=VectorDatabaseToolInput,
-            handle_tool_error=True,
-        )
+    def tool(cls) -> dict:
+        """Tool definition (OpenAI/Groq function-calling format) for searching videos."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "similarity_videos_search",
+                "description": "Advanced semantic video search tool powered by vector embeddings. Use this tool to: "
+                "- Find videos that match the semantic meaning of your query, not just exact keywords "
+                "- Discover relevant video content across different topics and contexts "
+                "- Retrieve video chunks that closely align with the intent of your search "
+                "- Explore nuanced connections between search queries and video content "
+                "- Get an Idea about the Channel's content"
+                "Ideal for complex information retrieval tasks that require understanding context, "
+                "subtext, and deeper semantic relationships in video transcripts."
+                "The tool may return some irrelevant results, your task is to provide the user with the most relevant ones",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The textual query to search for videos, optimized for similarity search",
+                        },
+                        "channel_id": {
+                            "type": "string",
+                            "description": "The ID of the YouTube channel associated with the query",
+                        },
+                    },
+                    "required": ["query", "channel_id"],
+                },
+            },
+        }

@@ -8,14 +8,12 @@ from typing import (
 )
 
 from django.conf import settings
-from langchain_core.tools import StructuredTool
 
 from app.models import (
     Channel,
     Video,
     VideoChunk,
 )
-from app.schemas import SQLQueryToolInput
 
 
 class SQLTools:
@@ -116,20 +114,30 @@ class SQLTools:
             """
 
     @classmethod
-    def tool(cls) -> StructuredTool:
-        """Create a structured tool for executing SQL queries."""
-        return StructuredTool.from_function(
-            func=cls.execute_query,
-            name="execute_query",
-            description="Powerful SQL query execution tool for advanced data retrieval and analysis. Use this to perform complex database operations such as: "
-            "- Joining multiple tables to extract comprehensive insights "
-            "- Filtering and aggregating video metadata "
-            "- Performing complex calculations or statistical analysis "
-            "- Retrieving specific subsets of data not easily accessible through other methods "
-            f"\n Table schema:\nSQLITE SYNTAX:\n{cls.get_tables_schema()}",
-            args_schema=SQLQueryToolInput,
-            handle_tool_error=True,
-        )
+    def tool(cls) -> dict:
+        """Tool definition (OpenAI/Groq function-calling format) for executing SQL queries."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "execute_query",
+                "description": "Powerful SQL query execution tool for advanced data retrieval and analysis. Use this to perform complex database operations such as: "
+                "- Joining multiple tables to extract comprehensive insights "
+                "- Filtering and aggregating video metadata "
+                "- Performing complex calculations or statistical analysis "
+                "- Retrieving specific subsets of data not easily accessible through other methods "
+                f"\n Table schema:\nSQLITE SYNTAX:\n{cls.get_tables_schema()}",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The SQL query to execute that respects the database schema",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
+        }
 
     @classmethod
     def get_tables_schema_markdown(cls) -> str:

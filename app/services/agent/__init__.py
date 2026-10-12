@@ -1,7 +1,7 @@
-"""This module contains the YTGraphAgent class, which is a graph-based agent for processing YouTube-related queries using LLM models."""
+"""Chat assistant that answers questions about a YouTube channel using its scanned videos."""
 
-from .main_graph import get_graph_instance
+from .agent import get_agent
 
 __all__ = [
-    "get_graph_instance",
+    "get_agent",
 ]

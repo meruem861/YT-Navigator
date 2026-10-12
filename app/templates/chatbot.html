@@ -119,10 +119,10 @@
                                                                     {% if video.timestamps %}
                                                                         <div class="space-y-1">
                                                                             {% for ts in video.timestamps %}
-                                                                                <a href="https://www.youtube.com/watch?v={{ video.id }}&t={{ ts.start_time }}s"
+                                                                                <a href="https://www.youtube.com/watch?v={{ video.id }}&t={{ ts.start_seconds }}s"
                                                                                    target="_blank"
                                                                                    class="block text-xs text-[var(--muted-text-color)] hover:text-rose-500 transition-colors">
-                                                                                    <span class="font-medium">{{ ts.start_time }} - {{ ts.end_time }}</span>
+                                                                                    <span class="font-medium">{{ ts.start }} - {{ ts.end }}</span>
                                                                                     <span class="mx-1">•</span>
                                                                                     {{ ts.description }}
                                                                                 </a>
@@ -356,7 +356,7 @@
                                                 ${video.timestamps ? `
                                                     <div class="space-y-1">
                                                         ${video.timestamps.map(ts => `
-                                                            <a href="https://www.youtube.com/watch?v=${video.id}&t=${ts.start}s"
+                                                            <a href="https://www.youtube.com/watch?v=${video.id}&t=${ts.start_seconds}s"
                                                                target="_blank"
                                                                class="block text-xs text-[var(--muted-text-color)] hover:text-rose-500 transition-colors">
                                                                 <span class="font-medium">${ts.start} - ${ts.end}</span>

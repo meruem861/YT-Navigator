@@ -1,10 +1,6 @@
 """Shared fixtures: fake Cohere and Groq so tests run offline."""
 
 import hashlib
-import os
-
-os.environ.setdefault("GROQ_API_KEY", "test")
-os.environ.setdefault("DJANGO_SECRET_KEY", "test")
 
 import numpy as np
 import pytest
@@ -66,6 +62,26 @@ def channel_with_videos(transactional_db):
             channel=channel,
         )
     return channel
+
+
+@pytest.fixture
+def sql_db_file(tmp_path, monkeypatch, channel_with_videos):
+    """Copy the test database to a file, since the SQL tool opens its own read-only connection."""
+    import sqlite3
+
+    from django.db import connection
+
+    from app.services.vector_database.tools import SQLTools
+
+    path = tmp_path / "db.sqlite3"
+    connection.ensure_connection()
+    target = sqlite3.connect(path)
+    connection.connection.backup(target)
+    target.close()
+    monkeypatch.setattr(
+        SQLTools, "get_db_connection", classmethod(lambda cls: sqlite3.connect(f"file:{path}?mode=ro", uri=True))
+    )
+    return path
 
 
 SCRAPED_CHUNKS = [

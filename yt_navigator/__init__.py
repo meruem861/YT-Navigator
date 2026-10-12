@@ -10,9 +10,7 @@ try:
     # First try to get version from package metadata (when installed)
     __version__ = importlib.metadata.version("yt_navigator")
 except importlib.metadata.PackageNotFoundError:
-    # If not installed, read from version.txt
-    version_file = Path(__file__).parent.parent / "version.txt"
-    if version_file.exists():
-        __version__ = version_file.read_text().strip()
-    else:
-        __version__ = "unknown"
+    # If not installed, read from version.txt (next to the package in the Android app)
+    version_files = [Path(__file__).parent.parent / "version.txt", Path(__file__).parent / "version.txt"]
+    version_file = next((f for f in version_files if f.exists()), None)
+    __version__ = version_file.read_text().strip() if version_file else "unknown"

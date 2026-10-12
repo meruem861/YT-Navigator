@@ -4,9 +4,21 @@ This module provides utility functions for calculating average scores and conver
 to minimal representations.
 """
 
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import List
 
 from app.schemas import ChunkSchema
+
+
+@dataclass
+class Document:
+    """A piece of text with metadata, as returned by the retrievers."""
+
+    page_content: str
+    metadata: dict = field(default_factory=dict)
 
 
 def get_avg_score(chunks: List[ChunkSchema], video_id: str) -> float:

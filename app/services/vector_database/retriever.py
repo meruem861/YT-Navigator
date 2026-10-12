@@ -8,17 +8,18 @@ from typing import List
 
 import numpy as np
 from asgiref.sync import sync_to_async
-from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
 from structlog import get_logger
 
 from app.models import VideoChunk
 
+from .utils import Document
+
 logger = get_logger(__name__)
 
 
 def chunk_to_document(chunk: VideoChunk, channel_id: str) -> Document:
-    """Convert a VideoChunk row into a Langchain Document."""
+    """Convert a VideoChunk row into a Document."""
     return Document(
         page_content=chunk.text,
         metadata={

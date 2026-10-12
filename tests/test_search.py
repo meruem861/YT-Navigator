@@ -91,22 +91,6 @@ async def test_delete_video_removes_chunks(fake_cohere, channel_with_videos):
     assert await VideoChunk.objects.filter(video_id="vid2").acount() == 2
 
 
-@pytest.fixture
-def sql_db_file(tmp_path, settings, channel_with_videos):
-    """Copy the test database to a file, since the SQL tool opens its own read-only connection."""
-    import sqlite3
-
-    from django.db import connection
-
-    path = tmp_path / "db.sqlite3"
-    connection.ensure_connection()
-    target = sqlite3.connect(path)
-    connection.connection.backup(target)
-    target.close()
-    settings.DATABASES["default"]["NAME"] = path
-    return path
-
-
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_sql_tool_is_read_only(sql_db_file):
@@ -126,4 +110,4 @@ async def test_sql_tool_is_read_only(sql_db_file):
 def test_sql_tool_schema_hides_embeddings():
     schema = str(SQLTools.get_tables_schema())
     assert "embedding" not in schema
-    assert "SQLITE SYNTAX" in SQLTools.tool().description
+    assert "SQLITE SYNTAX" in SQLTools.tool()["function"]["description"]

@@ -14,7 +14,7 @@ Perfect for researchers, students, content creators, or anyone who needs to extr
 
 ## 📱 Run it on your Android phone
 
-The whole app can run on the phone itself: the server runs in [Termux](https://f-droid.org/packages/com.termux/) and a small Android app opens it. See **[mobile/README.md](mobile/README.md)** for the step-by-step guide.
+YT Navigator ships as a single Android app (APK): the Python server is bundled inside it with [Chaquopy](https://chaquo.com/chaquopy/), so there is nothing else to install. See **[mobile/README.md](mobile/README.md)**.
 
 ## ✨ Main Features
 
@@ -128,7 +128,7 @@ graph TD
   - Structlog for logging
   - Pydantic for data validation
 - **🧠 AI & ML**:
-  - [LangGraph](https://www.langchain.com/langgraph) for conversational AI
+  - A small ReAct-style agent calling Groq's API directly (router + tool calls)
   - [Cohere](https://cohere.com/) `embed-v4.0` embeddings and `rerank-v3.5` reranking for semantic search
   - Cosine similarity with NumPy over embeddings stored in SQLite
   - [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) for keyword search
@@ -161,11 +161,9 @@ pip install -e .
 cp .env.example .env
 ```
 
-4. Create Django migrations and migrate the database (SQLite files are created in `data/`)
+4. Create the database (SQLite files are created in `data/`)
 ```bash
-python manage.py makemigrations app
 python manage.py migrate
-python manage.py collectstatic --noinput
 ```
 
 5. Run the development or production server
@@ -239,7 +237,7 @@ make help
 - [ ] 🐳 Add Docker support
 - [x] ✅ Add tests
 - [ ] 📋 Add support for playlist/shorts scanning
-- [x] 📱 Run on Android (Termux + WebView app)
+- [x] 📱 Android app (single APK)
 - [ ] 🌐 Add support for multiple languages
 
 ## 🤝 Contributing

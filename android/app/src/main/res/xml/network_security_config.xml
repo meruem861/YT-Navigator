@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The server runs on the phone itself over plain HTTP; allow it only for the loopback address. -->
+<!-- The bundled server runs inside the app over plain HTTP; allow it only for the loopback address. -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>

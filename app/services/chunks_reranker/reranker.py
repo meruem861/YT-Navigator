@@ -6,10 +6,10 @@ from typing import (
     List,
 )
 
-from langchain_core.documents import Document
 from structlog import get_logger
 
 from app.services.cohere_client import CohereClient
+from app.services.vector_database.utils import Document
 
 logger = get_logger(__name__)
 

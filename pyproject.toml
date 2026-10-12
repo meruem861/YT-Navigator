@@ -22,11 +22,6 @@ dependencies = [
     "scrapetube==2.5.1",
     "bs4==0.0.2",
     "httpx==0.28.1",
-    "langchain-core>=0.3.46,<0.4",
-    "langgraph==0.3.5",
-    "langchain-groq==0.2.5",
-    "langgraph-checkpoint-sqlite>=2.0.6,<2.0.8",  # 2.0.8+ requires sqlite-vec, which has no Android build
-    "aiosqlite>=0.20,<0.22",  # 0.22 dropped Connection.is_alive, used by langgraph-checkpoint-sqlite
     "markdown2==2.5.3",
 ]
 
@@ -53,7 +48,6 @@ version = { file = "version.txt" }
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 DJANGO_SETTINGS_MODULE = "yt_navigator.settings"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
-addopts = "--no-migrations"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.black]
@@ -108,4 +102,4 @@ convention = "google"
 # Ignore `E402` (import violations) in all `__init__.py` files
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
-"tests/*" = ["D103", "E402"]
+"tests/*" = ["D102", "D103", "D107"]
