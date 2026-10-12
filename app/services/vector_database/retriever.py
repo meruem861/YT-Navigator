@@ -1,20 +1,15 @@
 """Vector retrieval functionality for the database.
 
-This module provides retrieval operations for vector embeddings and keyword-based search
-using BM25 algorithm.
+This module provides semantic search over the embeddings stored in SQLite and keyword-based search
+using the BM25 algorithm.
 """
 
-import traceback
-from typing import (
-    List,
-    Optional,
-)
+from typing import List
 
-import asyncpg
+import numpy as np
 from asgiref.sync import sync_to_async
-from django.conf import settings
-from langchain_community.retrievers import BM25Retriever
-from langchain_core.documents.base import Document
+from langchain_core.documents import Document
+from rank_bm25 import BM25Okapi
 from structlog import get_logger
 
 from app.models import VideoChunk
@@ -22,108 +17,78 @@ from app.models import VideoChunk
 logger = get_logger(__name__)
 
 
-class VectorRetriever:
-    """Handles vector and keyword-based retrieval operations.
+def chunk_to_document(chunk: VideoChunk, channel_id: str) -> Document:
+    """Convert a VideoChunk row into a Langchain Document."""
+    return Document(
+        page_content=chunk.text,
+        metadata={
+            "id": chunk.id,
+            "video_id": chunk.video_id,
+            "start": chunk.start,
+            "end": chunk.end,
+            "text": chunk.text,
+            "channel_id": channel_id,
+        },
+    )
 
-    This class provides methods for checking document existence in the database
-    and performing keyword-based searches using BM25 algorithm.
-    """
+
+class VectorRetriever:
+    """Handles vector and keyword-based retrieval operations."""
 
     @staticmethod
-    async def get_non_existing_ids(ids: List[str]) -> List[str]:
-        """Retrieve IDs that do not exist in the database.
+    async def similarity_search(query_embedding: np.ndarray, channel_id: str, k: int = 20) -> List[Document]:
+        """Find the chunks of a channel closest to the query embedding (cosine similarity).
+
+        A channel holds at most a few thousand chunks, so a brute-force numpy search is fast enough
+        and avoids needing a vector database extension.
 
         Args:
-            ids: List of document IDs to check.
+            query_embedding: Embedding of the search query.
+            channel_id: The ID of the channel to search in.
+            k: Number of results to return.
 
         Returns:
-            List[str]: List of IDs that don't exist in the database.
-
-        Raises:
-            Exception: If there's an error during the retrieval process.
-
-        Note:
-            Uses asyncpg for efficient database querying.
+            List[Document]: The k most similar chunks, most similar first.
         """
-        if not ids:
+        chunks = await sync_to_async(
+            lambda: list(VideoChunk.objects.filter(video__channel_id=channel_id, embedding__isnull=False))
+        )()
+        if not chunks:
             return []
 
-        try:
-            async with asyncpg.create_pool(
-                user=settings.DATABASES["default"]["USER"],
-                password=settings.DATABASES["default"]["PASSWORD"],
-                database=settings.DATABASES["default"]["NAME"],
-                host=settings.DATABASES["default"]["HOST"],
-                port=settings.DATABASES["default"]["PORT"],
-            ) as pool:
-                async with pool.acquire() as conn:
-                    values_clause = ", ".join(f"('{id}')" for id in ids)
-                    raw_query = f"""
-                        SELECT input_id
-                        FROM (VALUES {values_clause}) AS input_ids(input_id)
-                        WHERE input_id NOT IN (SELECT id FROM langchain_pg_embedding);
-                    """
-                    rows = await conn.fetch(raw_query)
-                    return [row["input_id"] for row in rows]
-        except Exception as e:
-            logger.error("Error getting non-existing IDs", error=str(e), traceback=traceback.format_exc())
-            raise e
+        matrix = np.vstack([np.frombuffer(chunk.embedding, dtype=np.float32) for chunk in chunks])
+        if matrix.shape[1] != query_embedding.shape[0]:
+            logger.error(
+                "Embedding dimension mismatch, rescan the channel after changing EMBEDDING_MODEL",
+                stored=matrix.shape[1],
+                query=query_embedding.shape[0],
+            )
+            return []
+
+        norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(query_embedding)
+        scores = matrix @ query_embedding / np.where(norms == 0, 1, norms)
+        top = np.argsort(-scores)[:k]
+        return [chunk_to_document(chunks[i], channel_id) for i in top]
 
     @classmethod
-    async def get_bm25_retriever(cls, channel_id: str, **kwargs) -> Optional[BM25Retriever]:
-        """Get a BM25Retriever for the given channel.
-
-        Args:
-            channel_id: The ID of the channel to create the retriever for.
-            **kwargs: Additional keyword arguments for retriever configuration.
-
-        Returns:
-            Optional[BM25Retriever]: Configured BM25Retriever instance or None if creation fails.
-        """
-        try:
-            # Use select_related to prefetch the video relationship to avoid async access issues
-            chunks = await sync_to_async(
-                lambda: list(VideoChunk.objects.filter(video__channel_id=channel_id).select_related("video"))
-            )()
-
-            # Process all chunks in a sync context to avoid async DB access
-            def prepare_documents():
-                return [
-                    Document(
-                        page_content=chunk.text,
-                        metadata={
-                            "id": chunk.id,
-                            "video_id": chunk.video.id if hasattr(chunk, "video") and chunk.video else None,
-                            "start": chunk.start,
-                            "end": chunk.end,
-                            "text": chunk.text,
-                            "channel_id": channel_id,
-                        },
-                    )
-                    for chunk in chunks
-                ]
-
-            # Execute document preparation in sync context
-            documents = await sync_to_async(prepare_documents)()
-            return BM25Retriever.from_documents(documents or [])
-        except Exception as e:
-            logger.error("Error creating BM25Retriever", error=str(e), traceback=traceback.format_exc())
-            return None
-
-    @classmethod
-    async def keyword_search(cls, query: str, channel_id: str, **kwargs) -> List[Document]:
+    async def keyword_search(cls, query: str, channel_id: str, k: int = 4) -> List[Document]:
         """Perform keyword-based search using BM25.
 
         Args:
             query: The search query string.
             channel_id: The ID of the channel to search in.
-            **kwargs: Additional keyword arguments for search configuration.
+            k: Number of results to return.
 
         Returns:
-            List[Document]: List of matching documents, empty list if retriever not found.
+            List[Document]: List of matching documents, empty list if the channel has no chunks.
         """
-        retriever = await cls.get_bm25_retriever(channel_id, **kwargs)
-        if not retriever:
+        chunks = await sync_to_async(
+            lambda: list(VideoChunk.objects.filter(video__channel_id=channel_id).defer("embedding"))
+        )()
+        if not chunks:
             logger.warning("No Keyword retriever found for channel", channel_id=channel_id)
             return []
-        return await retriever.ainvoke(query)
+
+        documents = [chunk_to_document(chunk, channel_id) for chunk in chunks]
+        bm25 = BM25Okapi([doc.page_content.split() for doc in documents])
+        return bm25.get_top_n(query.split(), documents, n=k)

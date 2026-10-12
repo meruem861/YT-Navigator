@@ -1,21 +1,17 @@
 """This module contains the tools for the SQL database."""
 
-import asyncio
+import sqlite3
 from typing import (
     Any,
     Dict,
     List,
 )
 
-import asyncpg
-import psycopg2
-import psycopg2.extras
 from django.conf import settings
-from langchain.tools import StructuredTool
+from langchain_core.tools import StructuredTool
 
 from app.models import (
     Channel,
-    User,
     Video,
     VideoChunk,
 )
@@ -27,8 +23,8 @@ class SQLTools:
 
     @classmethod
     def get_db_connection(cls):
-        """Get a database connection."""
-        return psycopg2.connect(settings.PSYCOPG2_DATABASE_URL)
+        """Get a read-only database connection, so the agent can never modify data."""
+        return sqlite3.connect(f"file:{settings.DATABASES['default']['NAME']}?mode=ro", uri=True, timeout=30)
 
     @classmethod
     def close_db_connection(cls, conn):
@@ -49,6 +45,8 @@ class SQLTools:
                         "type": field.get_internal_type(),
                     }
                     for field in model._meta.fields
+                    # Embeddings are raw bytes and useless to the agent
+                    if field.get_internal_type() != "BinaryField"
                 ],
             }
             tables.append(table_info)
@@ -74,16 +72,16 @@ class SQLTools:
         return markdown
 
     @classmethod
-    async def execute_query(cls, query: str) -> str:
+    def execute_query(cls, query: str) -> str:
         """Execute a SELECT query and return the results.
 
         Args:
             query: The SQL query to execute (must be a SELECT query)
 
         Returns:
-            List of result rows as strings or an error message
+            Result rows as strings or an error message
         """
-        if not query.startswith("SELECT"):
+        if not query.lstrip().upper().startswith("SELECT"):
             return "Error: Only SELECT queries are supported"
 
         # get Video db_name
@@ -93,61 +91,42 @@ class SQLTools:
             return f"""DB SCHEMA:\n{cls.get_tables_schema()}\nError: You are allowed only to search in the {video_db_name} and {chunk_db_name} tables"""
 
         try:
-            # Extract connection parameters from the URL
-            conn_url = settings.PSYCOPG2_DATABASE_URL
-
-            # Connect using asyncpg
-            conn = await asyncpg.connect(conn_url)
+            conn = cls.get_db_connection()
             try:
-                # Execute the query
-                result = await conn.fetch(query)
-
-                # Format the results - asyncpg returns Record objects that need to be converted to dicts
-                formated_result = [str(dict(row.items())) for row in result]
-                if len(formated_result) > 20:
-                    formated_result.append(
-                        f"The result is too long; truncated to 20 rows from a total of {len(formated_result)} rows."
-                    )
-                    return "\n".join(formated_result[:20])
-                return "\n".join(formated_result)
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(query).fetchall()
             finally:
-                # Close the connection
-                await conn.close()
+                cls.close_db_connection(conn)
+
+            formated_result = [
+                str({key: "<binary>" if isinstance(row[key], bytes) else row[key] for key in row.keys()})
+                for row in rows[:20]
+            ]
+            if len(rows) > 20:
+                formated_result.append(
+                    f"The result is too long; truncated to 20 rows from a total of {len(rows)} rows."
+                )
+            return "\n".join(formated_result)
         except Exception as e:
             return f"""
             DB SCHEMA:
             {cls.get_tables_schema()}
-        
+
             #Error: {e}
             """
 
     @classmethod
     def tool(cls) -> StructuredTool:
         """Create a structured tool for executing SQL queries."""
-
-        def run_async_query(query: str) -> List[str] | str:
-            """Run the async query in a synchronous context.
-
-            Args:
-                query: The SQL query to execute
-
-            Returns:
-                The query results or error message
-            """
-            try:
-                return asyncio.run(cls.execute_query(query))
-            except Exception as e:
-                return f"Error executing query: {str(e)}"
-
         return StructuredTool.from_function(
-            func=run_async_query,
+            func=cls.execute_query,
             name="execute_query",
             description="Powerful SQL query execution tool for advanced data retrieval and analysis. Use this to perform complex database operations such as: "
             "- Joining multiple tables to extract comprehensive insights "
             "- Filtering and aggregating video metadata "
             "- Performing complex calculations or statistical analysis "
             "- Retrieving specific subsets of data not easily accessible through other methods "
-            f"\n Table schema:\nPOSTGRES SYNTAX:\n{cls.get_tables_schema()}",
+            f"\n Table schema:\nSQLITE SYNTAX:\n{cls.get_tables_schema()}",
             args_schema=SQLQueryToolInput,
             handle_tool_error=True,
         )

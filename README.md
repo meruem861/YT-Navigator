@@ -12,6 +12,10 @@ YT Navigator is an AI-powered application that helps you navigate and search thr
 
 Perfect for researchers, students, content creators, or anyone who needs to extract information from YouTube channels quickly.
 
+## 📱 Run it on your Android phone
+
+The whole app can run on the phone itself: the server runs in [Termux](https://f-droid.org/packages/com.termux/) and a small Android app opens it. See **[mobile/README.md](mobile/README.md)** for the step-by-step guide.
+
 ## ✨ Main Features
 
 - **🔐 Authentication**: Secure login and independent sessions
@@ -25,8 +29,8 @@ Perfect for researchers, students, content creators, or anyone who needs to extr
 For this part, the user enters a YouTube channel URL which the system validates before extracting the channel username. The system then fetches channel details including title, description, and profile picture, storing them in the database.
 
 After connecting to a channel, the user selects how many videos to scan (up to 100). The system then processes these videos in parallel through two paths:
-1. 📊 Video metadata is extracted and saved to a relational database (PostgreSQL)
-2. 📝 Video transcripts are extracted, split into segments, converted to vector embeddings, and stored in a vector database (PGVector)
+1. 📊 Video metadata is extracted and saved to a relational database (SQLite)
+2. 📝 Video transcripts are extracted, split into segments, converted to vector embeddings with Cohere, and stored next to the transcript segments in SQLite
 
 Once both processes are complete, the channel content becomes available for search and chat functionality.
 
@@ -54,7 +58,7 @@ graph TD
 ### 2 - 🔍 Querying the channel
 ![Querying the channel](./images/query.png)
 
-The querying process begins when a user enters a natural language query to search across the channel's content. The system processes this query through both semantic search (using vector embeddings) and keyword search (using BM25) for comprehensive results. These results are combined, enriched with video metadata from the relational database, and deduplicated. A cross-encoder model then reranks the results based on relevance to the query. The system standardizes relevance scores, groups results by video, and returns the most relevant videos along with specific transcript segments. The user interface displays these results with video thumbnails, titles, relevant transcript segments, and direct links to the exact timestamps in the videos where the information appears.
+The querying process begins when a user enters a natural language query to search across the channel's content. The system processes this query through both semantic search (using vector embeddings) and keyword search (using BM25) for comprehensive results. These results are combined, enriched with video metadata from the relational database, and deduplicated. Cohere's rerank model then reranks the results based on relevance to the query. The system standardizes relevance scores, groups results by video, and returns the most relevant videos along with specific transcript segments. The user interface displays these results with video thumbnails, titles, relevant transcript segments, and direct links to the exact timestamps in the videos where the information appears.
 
 <details>
 <summary><strong>Click to show/hide the Query Flow Diagram</strong></summary>
@@ -96,9 +100,9 @@ graph TD
     B -.-> D[static_not_relevant_reply
     llama-3.1-8b-instant]
     B -.-> E[tool_calls_reply
-    qwen-qwq-32b]
+    openai/gpt-oss-120b]
 
-    subgraph React Agent qwen-qwq-32b
+    subgraph React Agent openai/gpt-oss-120b
         E1[__start__] --> E2[agent]
         E2 -.continue.-> E3[tools]
         E2 -.end.-> E4[__end__]
@@ -120,16 +124,15 @@ graph TD
 
 - **🖥️ Backend**:
   - Django (Python)
-  - PostgreSQL
+  - SQLite
   - Structlog for logging
   - Pydantic for data validation
 - **🧠 AI & ML**:
   - [LangGraph](https://www.langchain.com/langgraph) for conversational AI
-  - [Sentence Transformers](https://www.sentence-transformers.org/) for semantic search
-  - [PGVector](https://www.pgvector.org/) as a vector database
+  - [Cohere](https://cohere.com/) `embed-v4.0` embeddings and `rerank-v3.5` reranking for semantic search
+  - Cosine similarity with NumPy over embeddings stored in SQLite
   - [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) for keyword search
-  - [bge-small-en-v1.5](https://huggingface.co/sentence-transformers/BAAI/bge-small-en-v1.5) for embeddings
-  - qwen-qwq-32b and llama-3.1-8b-instant from [Groq](http://groq.com/)
+  - openai/gpt-oss-120b and llama-3.1-8b-instant from [Groq](http://groq.com/)
 - **⚙️ Data Processing**:
   - [Scrapetube](https://github.com/dermasmid/scrapetube) for scraping videos
   - [youtube-transcript-api](https://pypi.org/project/youtube-transcript-api/) for obtaining transcripts
@@ -153,25 +156,25 @@ source venv/bin/activate
 pip install -e .
 ```
 
-3. Make sure you have a PostgreSQL database running.
-
-4. Create a `.env` file in the root directory from the `.env.example` file.
+3. Create a `.env` file in the root directory from the `.env.example` file and set your Groq and Cohere API keys.
 ```bash
 cp .env.example .env
 ```
 
-5. Create Django migrations and migrate the database
+4. Create Django migrations and migrate the database (SQLite files are created in `data/`)
 ```bash
+python manage.py makemigrations app
 python manage.py migrate
+python manage.py collectstatic --noinput
 ```
 
-6. Run the development or production server
+5. Run the development or production server
 ```bash
 make dev # for development
 make prod # for production
 ```
 ### 🐳 With Docker
-1. Create a `.env` file in the root directory from the `.env.example` file (Make sure you set *POSTGRES_HOST=db*).
+1. Create a `.env` file in the root directory from the `.env.example` file.
 ```bash
 cp .env.example .env
 ```
@@ -234,9 +237,9 @@ make help
 ## 🗺️ Roadmap
 
 - [ ] 🐳 Add Docker support
-- [ ] ✅ Add tests
+- [x] ✅ Add tests
 - [ ] 📋 Add support for playlist/shorts scanning
-- [ ] 📱 Improve mobile experience
+- [x] 📱 Run on Android (Termux + WebView app)
 - [ ] 🌐 Add support for multiple languages
 
 ## 🤝 Contributing

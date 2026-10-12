@@ -13,12 +13,14 @@ class VideoChunk(models.Model):
         start (TimeField): Start time of the video chunk.
         end (TimeField): End time of the video chunk.
         text (TextField): Transcribed text content of the video chunk.
+        embedding (BinaryField): float32 embedding of the text, used for semantic search.
     """
 
     video = models.ForeignKey("Video", on_delete=models.CASCADE, related_name="chunks")
     start = models.TimeField(null=True, blank=True)
     end = models.TimeField(null=True, blank=True)
     text = models.TextField()
+    embedding = models.BinaryField(null=True, editable=False)
 
     def dict(self):
         """Convert the model instance to a dictionary.

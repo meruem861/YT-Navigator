@@ -1,6 +1,6 @@
 """This module contains the prompts for the YTGraphAgent."""
 
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 SYSTEM_PROMPT_TEMPLATE = """**Name:** YTNavigator
 **Role:** Expert YouTube Assistant | Friendly AI Guide

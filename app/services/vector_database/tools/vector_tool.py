@@ -9,9 +9,8 @@ from typing import (
 
 import numpy as np
 from asgiref.sync import sync_to_async
-from langchain.tools import StructuredTool
-from langchain_core.documents.base import Document
-from sklearn.preprocessing import MinMaxScaler
+from langchain_core.documents import Document
+from langchain_core.tools import StructuredTool
 from structlog import get_logger
 
 from app.models import Video
@@ -36,11 +35,10 @@ class VectorDatabaseTools:
     """Tools for vector database operations."""
 
     vectorstore_service = VectorDatabaseService()
-    _scaler = MinMaxScaler(feature_range=(0, 100))
 
     @classmethod
     def _standardize_scores(cls, chunks: List[ChunkSchema]) -> List[ChunkSchema]:
-        """Standardize chunk scores to a 0-100 scale using MinMaxScaler.
+        """Standardize chunk scores to a 0-100 scale using min-max scaling.
 
         This method transforms the raw similarity scores of chunks to a standardized
         0-100 scale for better interpretability. It handles edge cases where scaling
@@ -59,22 +57,17 @@ class VectorDatabaseTools:
             return chunks
 
         # Extract scores into a numpy array
-        scores = np.array([chunk.score for chunk in chunks], dtype=np.float32).reshape(-1, 1)
+        scores = np.array([chunk.score for chunk in chunks], dtype=np.float32)
 
-        try:
-            # Scale scores to 0-100 range
-            scaled_scores = cls._scaler.fit_transform(scores)
-            # Round to 2 decimal places
-            scaled_scores = np.round(scaled_scores, 2)
+        score_range = float(scores.max() - scores.min())
+        if not np.isfinite(score_range) or score_range == 0:
+            # All scores equal (or invalid): there is nothing to rank, use a neutral score
+            scaled_scores = np.full(len(chunks), 50.0)
+        else:
+            scaled_scores = np.round((scores - scores.min()) / score_range * 100, 2)
 
-            # Update chunks with new scores
-            for chunk, score in zip(chunks, scaled_scores.flatten(), strict=True):
-                chunk.score = float(score)
-        except (ValueError, TypeError):
-            # Fallback for invalid scores or edge cases
-            default_score = 50
-            for chunk in chunks:
-                chunk.score = default_score
+        for chunk, score in zip(chunks, scaled_scores, strict=True):
+            chunk.score = float(score)
 
         return chunks
 
@@ -143,22 +136,14 @@ class VectorDatabaseTools:
         """
         logger.info("Starting search with query", query=query, channel_id=channel_id)
 
-        vstore = await cls.vectorstore_service.get_vstore(channel_id)
-        if not vstore:
-            logger.warning("No vector store found for this channel")
-            return QueryVectorStoreResponse(chunks=[], videos=[])
-
-        # Use a semaphore to limit concurrent database operations
         similarity_results = []
         keyword_results = []
 
         # Perform similarity search
         logger.info("Performing similarity search...")
         try:
-            # Use a separate task for similarity search
-            similarity_results = await vstore.asimilarity_search(
-                query, k=20, filter={"channel_id": {"$eq": channel_id}}
-            )
+            query_embedding = await cls.vectorstore_service.embed_query(query)
+            similarity_results = await VectorRetriever.similarity_search(query_embedding, channel_id, k=20)
             logger.info("Found results from similarity search", count=len(similarity_results))
         except Exception as e:
             logger.error("Error in similarity search", error=str(e), traceback=traceback.format_exc())
@@ -229,7 +214,7 @@ class VectorDatabaseTools:
         # Rerank results with fallback
         logger.info("Reranking results...")
         try:
-            reranked_results = ChunksReRanker.rerank(query, enriched_results)
+            reranked_results = await ChunksReRanker.rerank(query, enriched_results)
             if not reranked_results:
                 logger.warning("No results after reranking, falling back to original results")
                 # Convert enriched results to the expected format

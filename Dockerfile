@@ -8,12 +8,6 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies required for psycopg and other packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
 ARG UID=10001
 RUN adduser \
     --disabled-password \
@@ -39,15 +33,15 @@ COPY . .
 # Set up all directories and permissions before switching to appuser
 RUN mkdir -p /app/logs && \
     touch /app/logs/$(date +%Y-%m-%d).jsonl && \
-    mkdir -p /app/.cache/huggingface/transformers && \
+    mkdir -p /app/data && \
     chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
     chmod 777 /app/logs && \
     chmod 666 /app/logs/$(date +%Y-%m-%d).jsonl && \
     chmod +x /app/docker-entrypoint.sh
 
-# Set environment variable for Hugging Face cache
-ENV HF_HOME=/app/.cache/huggingface
+ENV DATA_DIR=/app/data
+ENV ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
 
 # Switch to the non-privileged user to run the application.
 USER appuser
@@ -59,4 +53,4 @@ EXPOSE 8000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Run the application.
-CMD ["gunicorn", "yt_navigator.wsgi", "--bind=0.0.0.0:8000", "--workers=4", "--threads=4", "--timeout=120"]
+CMD ["uvicorn", "yt_navigator.asgi:application", "--host=0.0.0.0", "--port=8000"]

@@ -25,9 +25,10 @@ os.makedirs(logs_dir, exist_ok=True)
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG")
+DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
 
-ALLOWED_HOSTS = []
+# The app is meant to run on the phone itself (Termux) and be opened from the WebView app or the browser.
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 
 # Application definition
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -78,22 +80,24 @@ WSGI_APPLICATION = "yt_navigator.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# All data lives in local SQLite files so the whole app can run on a phone.
+DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
+os.makedirs(DATA_DIR, exist_ok=True)
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB"),
-        "USER": os.getenv("POSTGRES_USER"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
-        "HOST": os.getenv("POSTGRES_HOST"),
-        "PORT": os.getenv("POSTGRES_PORT"),
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": DATA_DIR / "db.sqlite3",
+        "OPTIONS": {
+            # Scans write from several threads; wait for the lock instead of failing.
+            "timeout": 30,
+            "init_command": "PRAGMA journal_mode=WAL;",
+        },
     }
 }
 
-# SQLAlchemy connection string for async operations
-DATABASE_URL = f"postgresql+asyncpg://{DATABASES['default']['USER']}:{DATABASES['default']['PASSWORD']}@{DATABASES['default']['HOST']}:{DATABASES['default']['PORT']}/{DATABASES['default']['NAME']}"
-
-# Standard PostgreSQL connection string for psycopg2
-PSYCOPG2_DATABASE_URL = f"postgresql://{DATABASES['default']['USER']}:{DATABASES['default']['PASSWORD']}@{DATABASES['default']['HOST']}:{DATABASES['default']['PORT']}/{DATABASES['default']['NAME']}"
+# Chat history (LangGraph checkpoints) is kept in its own SQLite file to avoid lock contention.
+CHECKPOINT_DB_PATH = DATA_DIR / "checkpoints.sqlite3"
 
 
 # Password validation
@@ -136,6 +140,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -200,16 +205,14 @@ LOGGING = {
     },
 }
 
-# Model selection and sequence length
-RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-RERANKER_MAX_SEQUENCE_LENGTH = os.getenv("RERANKER_MAX_SEQUENCE_LENGTH", 512)
-
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-EMBEDDING_BATCH_SIZE = os.getenv("EMBEDDING_BATCH_SIZE", 32)
+# Cohere (https://dashboard.cohere.com/) provides embeddings and reranking, so no ML model runs on the device
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+COHERE_API_URL = os.getenv("COHERE_API_URL", "https://api.cohere.com/v2")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "embed-v4.0")
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", 96))  # Cohere accepts up to 96 texts per call
+RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "rerank-v3.5")
 
 INSTANT_LLM = os.getenv("INSTANT_LLM", "llama-3.1-8b-instant")
-POWERFUL_LLM = os.getenv("POWERFUL_LLM", "qwen-qwq-32b")
+POWERFUL_LLM = os.getenv("POWERFUL_LLM", "openai/gpt-oss-120b")
 
-CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
-
-SCRAPER_WORKERS_NUM = os.getenv("SCRAPER_WORKERS_NUM", os.cpu_count())
+SCRAPER_WORKERS_NUM = int(os.getenv("SCRAPER_WORKERS_NUM", min(os.cpu_count() or 1, 4)))

@@ -3,9 +3,11 @@
 import asyncio
 import os
 import traceback
+from contextlib import asynccontextmanager
 from json import JSONDecodeError
 from typing import (
     Any,
+    AsyncIterator,
     Dict,
     List,
     Literal,
@@ -13,29 +15,26 @@ from typing import (
 )
 
 import structlog
-from asgiref.sync import sync_to_async
 from django.conf import settings
-from langchain.output_parsers import PydanticOutputParser
-from langchain.schema import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-)
-from langchain.tools import StructuredTool
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
+    HumanMessage,
+    SystemMessage,
     messages_to_dict,
     trim_messages,
 )
+from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.tools import StructuredTool
 from langchain_groq import ChatGroq
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import (
     END,
     StateGraph,
 )
 from langgraph.graph.state import CompiledStateGraph
-from psycopg_pool import AsyncConnectionPool
 from pydantic import ValidationError
 
 from app.models import (
@@ -83,67 +82,26 @@ class AgentGraph:
             model_name=settings.INSTANT_LLM,
             api_key=os.getenv("GROQ_API_KEY"),
         )
-        self.conn_pool = None
-        self.checkpointer = None
-        self.graph = None
         logger.info("AgentGraph initialized successfully")
 
-        self.evaluator = LangsmithEvaluationService()
-
-    async def setup(self):
-        """Setup the checkpointer and initialize the graph.
-
-        This method initializes the PostgreSQL checkpointer and builds the agent graph.
-        It ensures all async operations are performed in the current event loop.
-        """
-        # Get the current event loop
-        current_loop = asyncio.get_running_loop()
-        logger.debug("Setting up agent graph in event loop", loop_id=id(current_loop))
-
-        # Close existing resources if they exist
-        if self.conn_pool is not None:
+        # LangSmith dataset collection is optional; it needs network access and an API key.
+        self.evaluator = None
+        if os.getenv("LANGSMITH_API_KEY"):
             try:
-                await self.conn_pool.close()
+                self.evaluator = LangsmithEvaluationService()
             except Exception as e:
-                logger.warning("Error closing existing connection pool", error=e)
+                logger.warning("LangSmith evaluation disabled", error=str(e))
 
-        # Initialize the checkpointer
-        self.conn_pool = await self.get_pool()
-        self.checkpointer = AsyncPostgresSaver(self.conn_pool)
-        await self.checkpointer.setup()
+    @asynccontextmanager
+    async def checkpointed_graph(self) -> AsyncIterator[CompiledStateGraph]:
+        """Yield the agent graph wired to a SQLite checkpointer bound to the current event loop.
 
-        # Build the graph
-        self.graph = self.build_graph()
-        logger.info("Agent graph setup completed")
-
-    async def get_pool(self) -> AsyncConnectionPool:
-        """Initialize and return the database connection pool.
-
-        Returns:
-            AsyncConnectionPool: The database connection pool.
-
-        Note:
-            This method ensures the connection pool is created in the current event loop.
+        A fresh connection is opened per call so the checkpointer never outlives the event loop it was
+        created in (Django may run each async view in its own loop).
         """
-        logger.info("Initializing database connection pool")
-        # Get the current event loop
-        current_loop = asyncio.get_running_loop()
-        logger.debug("Creating connection pool in event loop", loop_id=id(current_loop))
-
-        # Create a new connection pool in the current event loop
-        conn_pool = AsyncConnectionPool(
-            conninfo=settings.PSYCOPG2_DATABASE_URL,
-            max_size=None,
-            min_size=1,
-            timeout=60,
-            open=False,  # Don't open in constructor to avoid deprecation warning
-            kwargs={"autocommit": True},  # Set autocommit to True to allow CREATE INDEX CONCURRENTLY
-        )
-
-        # Open the pool explicitly as recommended in the deprecation warning
-        await conn_pool.open()
-
-        return conn_pool
+        async with AsyncSqliteSaver.from_conn_string(str(settings.CHECKPOINT_DB_PATH)) as checkpointer:
+            await checkpointer.setup()
+            yield self.build_graph(checkpointer)
 
     async def route_message(self, state: AgentState) -> AgentState:
         """Route the message to the appropriate node.
@@ -167,7 +125,7 @@ class AgentGraph:
                 [
                     SystemMessage(
                         content=ROUTE_QUERY_SYSTEM_PROMPT.format(
-                            channel=state.channel.pretty_str(),
+                            channel=await state.channel.pretty_str(),
                             tools=self._pretty_str_tools(self.tools),
                             format_instructions=output_parser.get_format_instructions(),
                         )
@@ -290,7 +248,7 @@ class AgentGraph:
         trimmed_messages = trim_messages(
             messages,
             strategy="last",
-            token_counter=self.model,
+            token_counter=count_tokens_approximately,
             max_tokens=1000,
             start_on="human",
             include_system=False,
@@ -315,8 +273,11 @@ class AgentGraph:
             """
         return string_wrapper
 
-    def build_graph(self) -> CompiledStateGraph:
+    def build_graph(self, checkpointer: Optional[AsyncSqliteSaver] = None) -> CompiledStateGraph:
         """Build the agent graph.
+
+        Args:
+            checkpointer: The checkpointer used to persist the conversation.
 
         Returns:
             CompiledStateGraph: The compiled graph for the agent.
@@ -346,7 +307,7 @@ class AgentGraph:
 
             graph.set_entry_point("route_message")
 
-            compiled_graph = graph.compile(checkpointer=self.checkpointer)
+            compiled_graph = graph.compile(checkpointer=checkpointer)
             logger.info("Agent graph built successfully")
             return compiled_graph
         except Exception as e:
@@ -383,14 +344,13 @@ class AgentGraph:
                 },
             }
 
-            # Ensure we're in the right event loop context
-            current_loop = asyncio.get_running_loop()
-            logger.debug("Using event loop", loop_id=id(current_loop))
-
-            # Invoke the graph
-            result = await self.graph.ainvoke(initial_state, config)
+            async with self.checkpointed_graph() as graph:
+                result = await graph.ainvoke(initial_state, config)
 
             logger.info("Agent graph execution completed successfully")
+
+            if self.evaluator is None:
+                return result
 
             # Create and track the background task
             task = asyncio.create_task(self._background_add_example(result))
@@ -518,35 +478,8 @@ class AgentGraph:
             Exception: If there's an error fetching the chat history.
         """
         try:
-            await self.get_pool()
-
-            # Get the current event loop
-            current_loop = asyncio.get_running_loop()
-            logger.debug("Getting chat history in event loop", loop_id=id(current_loop))
-
-            # Make sure the graph is initialized in the current event loop
-            if self.graph is None:
-                logger.info("Graph not initialized, setting up now")
-                await self.setup()
-
-            # Use a thread-sensitive sync_to_async to ensure proper event loop handling
-            async def get_state():
-                try:
-
-                    @sync_to_async(thread_sensitive=True)
-                    def _get_state():
-                        try:
-                            return self.graph.get_state(config={"configurable": {"thread_id": user_id}})
-                        except Exception as e:
-                            logger.error("Error getting graph state", error=e, traceback=traceback.format_exc())
-                            return None
-
-                    return await _get_state()
-                except RuntimeError as e:
-                    logger.error("Event loop error during state retrieval", error=e, traceback=traceback.format_exc())
-                    return None
-
-            state = await get_state()
+            async with self.checkpointed_graph() as graph:
+                state = await graph.aget_state(config={"configurable": {"thread_id": user_id}})
 
             if not state:
                 return []
@@ -598,84 +531,27 @@ class AgentGraph:
             Exception: If there's an error clearing the chat history.
         """
         try:
-            # Get the current event loop
-            current_loop = asyncio.get_running_loop()
-            logger.debug("Clearing chat history in event loop", loop_id=id(current_loop))
-
-            # Make sure the pool is initialized in the current event loop
-            conn_pool = await self.get_pool()
-
-            # Use a new connection for this specific operation
-            async with conn_pool.connection() as conn:
-                for table in settings.CHECKPOINT_TABLES:
-                    try:
-                        await conn.execute(f"DELETE FROM {table} WHERE thread_id = %s", (user_id,))
-                        logger.info(f"Cleared {table} for user {user_id}")
-                    except Exception as e:
-                        logger.error(f"Error clearing {table}", error=e, traceback=traceback.format_exc())
-                        raise
-
+            async with AsyncSqliteSaver.from_conn_string(str(settings.CHECKPOINT_DB_PATH)) as checkpointer:
+                await checkpointer.setup()
+                await checkpointer.adelete_thread(user_id)
+            logger.info(f"Cleared chat history for user {user_id}")
         except Exception as e:
             logger.error("Failed to clear chat history", error=str(e), traceback=traceback.format_exc())
             raise
 
 
-# Initialize graph instance lazily when needed
-graph = None
 _graph_instance = None
 
 
 async def get_graph_instance():
-    """Get or create an instance of the AgentGraph class.
-
-    This factory function ensures the graph is properly initialized
-    in the current event loop context.
+    """Get or create the shared AgentGraph instance.
 
     Returns:
-        AgentGraph: An initialized instance of the AgentGraph.
+        AgentGraph: The AgentGraph instance.
     """
     global _graph_instance
 
-    try:
-        # Get the current event loop
-        current_loop = asyncio.get_running_loop()
-        logger.debug("Getting graph instance in event loop", loop_id=id(current_loop))
-
-        # If instance doesn't exist or was created in a different event loop, create a new one
-        if _graph_instance is None:
-            logger.info("Creating new AgentGraph instance")
-            _graph_instance = AgentGraph()
-            await _graph_instance.setup()
-        else:
-            # Check if we need to reinitialize due to event loop changes
-            try:
-                # Try a simple operation to check if the instance is usable
-                await _graph_instance.get_pool()
-            except (RuntimeError, asyncio.InvalidStateError) as e:
-                error_msg = str(e)
-                if "is bound to a different event loop" in error_msg or "Event loop is closed" in error_msg:
-                    logger.warning("Existing graph instance has event loop issues, reinitializing", error=error_msg)
-                    _graph_instance = AgentGraph()
-                    await _graph_instance.setup()
-                else:
-                    logger.error("Error checking graph instance", error=e, traceback=traceback.format_exc())
-                    raise
-
-        return _graph_instance
-    except Exception as e:
-        logger.error("Error getting graph instance", error=e, traceback=traceback.format_exc())
-        raise
-
-
-# Function to get the graph instance synchronously if needed
-def get_graph():
-    """Get the graph instance, initializing it if necessary.
-
-    Returns:
-        AgentGraph: The graph instance.
-    """
-    global graph
-    if graph is None:
-        # This will be initialized properly when first accessed asynchronously
-        logger.info("Graph instance not yet initialized, will be created on first async access")
-    return graph
+    if _graph_instance is None:
+        logger.info("Creating new AgentGraph instance")
+        _graph_instance = AgentGraph()
+    return _graph_instance

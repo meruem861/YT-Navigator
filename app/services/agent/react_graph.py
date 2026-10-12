@@ -10,6 +10,7 @@ from langchain_core.messages import (
     ToolMessage,
     trim_messages,
 )
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableConfig
 from langchain_groq import ChatGroq
@@ -93,7 +94,7 @@ async def call_model(
     trimmed_messages = trim_messages(
         copy.deepcopy(state.messages),
         strategy="last",
-        token_counter=model,
+        token_counter=count_tokens_approximately,
         max_tokens=2000,
         start_on="human",
         include_system=False,

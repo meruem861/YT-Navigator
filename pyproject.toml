@@ -8,15 +8,13 @@ name = "yt_navigator"
 dynamic = ["version"]
 description = "A project powered by AI to help you find information on specific YouTube channels."
 readme = "README.md"
-requires-python = ">=3.13.2"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "django==5.1.7",
-    "gunicorn==21.2.0",
-    "psycopg2-binary==2.9.10",
-    "asyncpg==0.30.0",
-    "torch==2.6.0",
-    "sentence-transformers==3.4.1",
+    "uvicorn==0.34.0",
+    "whitenoise==6.9.0",
+    "numpy",
     "rank_bm25==0.2.2",
     "python-dotenv==1.0.1",
     "structlog==25.1.0",
@@ -24,12 +22,11 @@ dependencies = [
     "scrapetube==2.5.1",
     "bs4==0.0.2",
     "httpx==0.28.1",
-    "langchain-huggingface",
-    "langchain-postgres",
-    "langchain-community==0.3.17",
+    "langchain-core>=0.3.46,<0.4",
     "langgraph==0.3.5",
     "langchain-groq==0.2.5",
-    "langgraph-checkpoint-postgres==2.0.16",
+    "langgraph-checkpoint-sqlite>=2.0.6,<2.0.8",  # 2.0.8+ requires sqlite-vec, which has no Android build
+    "aiosqlite>=0.20,<0.22",  # 0.22 dropped Connection.is_alive, used by langgraph-checkpoint-sqlite
     "markdown2==2.5.3",
 ]
 
@@ -37,6 +34,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-django",
+    "pytest-asyncio",
     "black",
     "isort",
     "flake8",
@@ -55,6 +53,8 @@ version = { file = "version.txt" }
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 DJANGO_SETTINGS_MODULE = "yt_navigator.settings"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
+addopts = "--no-migrations"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.black]
 line-length = 119
@@ -108,3 +108,4 @@ convention = "google"
 # Ignore `E402` (import violations) in all `__init__.py` files
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
+"tests/*" = ["D103", "E402"]

@@ -5,7 +5,7 @@ migrate:
 	python manage.py migrate
 
 prod:
-	python -m gunicorn -b 0.0.0.0:8000 core.wsgi
+	uvicorn yt_navigator.asgi:application --host 0.0.0.0 --port 8000
 
 dev:
 	python manage.py runserver
