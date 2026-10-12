@@ -50,3 +50,8 @@ def test_chat_without_channel_returns_friendly_error(logged_in_client):
     response = logged_in_client.post("/send-message/", {"message": "hello"})
     assert response.status_code == 400
     assert "Connect a YouTube channel" in response.json()["response"]
+
+
+def test_error_message_is_shown_once(logged_in_client):
+    response = logged_in_client.post("/get-channel-information/", {"channel_link": "https://example.com/x"}, follow=True)
+    assert response.content.decode().count("Invalid YouTube channel link format") == 1

@@ -14,16 +14,30 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+# Accepts the forms YouTube and its app produce, e.g. https://www.youtube.com/@name, https://youtube.com/@name?si=...,
+# https://m.youtube.com/@name/videos, youtube.com/@name and a bare @name
+CHANNEL_LINK_PATTERN = re.compile(
+    r"^\s*(?:(?:https?://)?(?:www\.|m\.)?youtube\.com/)?@(?P<username>[A-Za-z0-9._-]+)(?:[/?#].*)?\s*$",
+    re.IGNORECASE,
+)
+
+
 def get_channel_username(channel_link: str) -> str:
-    """Extract the username from a YouTube channel link.
+    """Extract the username (handle without "@") from a YouTube channel link.
 
     Args:
-        channel_link: The full YouTube channel URL
+        channel_link: The YouTube channel URL or handle
 
     Returns:
         str: The extracted channel username
+
+    Raises:
+        ValueError: If the link is not a YouTube channel link
     """
-    username = channel_link.split("https://www.youtube.com/@")[1].strip()
+    match = CHANNEL_LINK_PATTERN.match(channel_link or "")
+    if not match:
+        raise ValueError("Invalid YouTube channel link format (expected e.g. https://www.youtube.com/@channel)")
+    username = match.group("username")
     logger.debug("Extracted channel username", username=username)
     return username
 
@@ -45,12 +59,11 @@ def validate_channel_link(channel_link: str) -> str:
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    if not re.match(r"https://www.youtube.com/@.*", channel_link.strip()):
-        error_msg = "Invalid YouTube channel link format"
-        logger.error(error_msg, channel_link=channel_link)
-        raise ValueError(error_msg)
-
-    channel_username = get_channel_username(channel_link)
+    try:
+        channel_username = get_channel_username(channel_link)
+    except ValueError:
+        logger.error("Invalid YouTube channel link format", channel_link=channel_link)
+        raise
 
     try:
         scrapetube.get_channel(channel_username)

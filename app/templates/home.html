@@ -2,6 +2,9 @@
 
 {% block title %}Home{% endblock title %}
 
+{# This page shows its own messages #}
+{% block messages %}{% endblock messages %}
+
 {% block content %}
 <div class="min-h-screen bg-[var(--bg-color)] text-[var(--text-color)] py-8 px-4 sm:px-6 lg:px-8 space-y-6">
     {% if messages %}
