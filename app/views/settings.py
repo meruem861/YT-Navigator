@@ -1,11 +1,13 @@
 """Settings page: API keys used by the app."""
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import (
     redirect,
     render,
 )
+from django.views.decorators.http import require_http_methods
 
 from app.services.app_settings import (
     EDITABLE_KEYS,
@@ -13,6 +15,8 @@ from app.services.app_settings import (
     get_override,
     set_override,
 )
+from app.services.cohere_client import CohereClient
+from app.services.groq_client import GroqClient
 
 
 def _key_status(name: str) -> dict:
@@ -45,3 +49,31 @@ def settings_view(request):
         return redirect("app:settings")
 
     return render(request, "settings.html", {"keys": [_key_status(name) for name in EDITABLE_KEYS]})
+
+
+async def _check_groq() -> tuple[bool, str]:
+    try:
+        models = await GroqClient().list_models()
+    except Exception as e:
+        return False, f"Groq key: not working ({e})"
+    missing = [m for m in (settings.INSTANT_LLM, settings.POWERFUL_LLM) if m not in models]
+    if missing:
+        return False, f"Groq key: works, but these models are not available: {', '.join(missing)}"
+    return True, "Groq key: works"
+
+
+async def _check_cohere() -> tuple[bool, str]:
+    try:
+        await CohereClient().embed(["test"], input_type="search_query")
+    except Exception as e:
+        return False, f"Cohere key: not working ({e})"
+    return True, "Cohere key: works"
+
+
+@login_required
+@require_http_methods(["POST"])
+async def test_keys_view(request):
+    """Call Groq and Cohere with the current keys and report the result."""
+    for ok, message in (await _check_groq(), await _check_cohere()):
+        (messages.success if ok else messages.error)(request, message)
+    return redirect("app:settings")

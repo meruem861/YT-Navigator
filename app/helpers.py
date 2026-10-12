@@ -1,5 +1,6 @@
 """Helper functions for the application."""
 
+import re
 from datetime import (
     datetime,
     timedelta,
@@ -31,10 +32,12 @@ def get_exact_time(relative_time: str) -> datetime | None:
     }
 
     try:
-        # Extract number and unit from the relative time string
-        parts = relative_time.split()
-        number = int(parts[0])
-        unit = parts[1].lower().rstrip("s")  # Normalize to singular form (e.g., "months" -> "month")
+        # Extract number and unit, ignoring prefixes such as "Streamed" ("Streamed 2 days ago")
+        match = re.search(r"(\d+)\s+([A-Za-z]+)", relative_time)
+        if not match:
+            raise ValueError(f"Unrecognized relative time: {relative_time}")
+        number = int(match.group(1))
+        unit = match.group(2).lower().rstrip("s")  # Normalize to singular form (e.g., "months" -> "month")
 
         if unit in time_units:
             if unit == "month":

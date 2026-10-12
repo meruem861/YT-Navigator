@@ -176,7 +176,19 @@ async def scan_channel(request):
             chunks_count=len(chunks),
         )
 
-        messages.success(request, f"Successfully scanned {len(videos)} videos and extracted {len(chunks)} chunks.")
+        if not videos:
+            messages.error(request, "No videos were found on this channel.")
+        elif not chunks:
+            blocked = get_youtube_scraper().transcript_scraper.blocked_count
+            reason = (
+                "YouTube is temporarily blocking transcript requests from this network; try again later or switch "
+                "between Wi-Fi and mobile data."
+                if blocked
+                else "These videos have no captions."
+            )
+            messages.error(request, f"Found {len(videos)} videos but could not get any transcript. {reason}")
+        else:
+            messages.success(request, f"Successfully scanned {len(videos)} videos and extracted {len(chunks)} chunks.")
         return redirect("app:home")
 
     except Exception as e:

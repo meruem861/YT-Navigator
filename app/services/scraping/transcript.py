@@ -8,6 +8,7 @@ from typing import (
 import structlog
 from youtube_transcript_api import (
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     YouTubeTranscriptApi,
 )
@@ -27,6 +28,22 @@ class TranscriptScraper:
             max_transcript_segment_duration: Maximum duration for transcript segments in seconds
         """
         self.max_transcript_segment_duration = max_transcript_segment_duration
+        self.blocked_count = 0
+
+    @staticmethod
+    def _fetch_raw_transcript(video_id: str) -> List[Dict]:
+        """Fetch the best available transcript in any language.
+
+        Prefers captions written by the creator over auto-generated ones; the video's own language is kept
+        (embeddings and reranking are multilingual), so non-English channels work too.
+        """
+        # One client per call: YouTubeTranscriptApi is not thread-safe
+        transcripts = list(YouTubeTranscriptApi().list(video_id))
+        if not transcripts:
+            return []
+        best = sorted(transcripts, key=lambda t: t.is_generated)[0]
+        logger.debug("Using transcript", video_id=video_id, language=best.language_code, generated=best.is_generated)
+        return best.fetch().to_raw_data()
 
     def get_video_transcript(self, video_metadata: Dict) -> List[Dict]:
         """Fetches and formats the transcript of a YouTube video.
@@ -40,8 +57,13 @@ class TranscriptScraper:
         video_id = video_metadata["videoId"]
 
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript = self._fetch_raw_transcript(video_id)
             return self._format_transcript(transcript, video_metadata)
+
+        except RequestBlocked as e:
+            self.blocked_count += 1
+            logger.warning("YouTube blocked the transcript request", video_id=video_id, error=str(e)[:300])
+            return []
 
         except NoTranscriptFound:
             logger.warning(

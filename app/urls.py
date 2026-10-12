@@ -19,6 +19,7 @@ from .views import (
     scan_channel,
     send_message,
     settings_view,
+    test_keys_view,
 )
 
 app_name = "app"
@@ -45,4 +46,5 @@ urlpatterns = [
     path("clear-chat-history/", clear_chat_history, name="clear_chat_history"),
     # settings (API keys)
     path("settings/", settings_view, name="settings"),
+    path("settings/test-keys/", test_keys_view, name="test_keys"),
 ]

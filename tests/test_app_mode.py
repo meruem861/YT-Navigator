@@ -53,5 +53,34 @@ def test_chat_without_channel_returns_friendly_error(logged_in_client):
 
 
 def test_error_message_is_shown_once(logged_in_client):
-    response = logged_in_client.post("/get-channel-information/", {"channel_link": "https://example.com/x"}, follow=True)
+    response = logged_in_client.post(
+        "/get-channel-information/", {"channel_link": "https://example.com/x"}, follow=True
+    )
     assert response.content.decode().count("Invalid YouTube channel link format") == 1
+
+
+def test_test_keys_reports_each_service(logged_in_client, monkeypatch, settings):
+    from app.services.cohere_client import CohereError
+    from app.services.groq_client import GroqError
+
+    async def models(self):
+        return [settings.INSTANT_LLM]  # the powerful model is missing
+
+    async def bad_embed(self, texts, input_type):
+        raise CohereError("invalid api token")
+
+    monkeypatch.setattr("app.services.groq_client.GroqClient.list_models", models)
+    monkeypatch.setattr("app.services.cohere_client.CohereClient.embed", bad_embed)
+
+    page = logged_in_client.post("/settings/test-keys/", follow=True).content.decode()
+    assert f"these models are not available: {settings.POWERFUL_LLM}" in page
+    assert "Cohere key: not working (invalid api token)" in page
+
+    async def groq_error(self):
+        raise GroqError("Invalid API Key")
+
+    monkeypatch.setattr("app.services.groq_client.GroqClient.list_models", groq_error)
+    assert (
+        "Groq key: not working (Invalid API Key)"
+        in logged_in_client.post("/settings/test-keys/", follow=True).content.decode()
+    )

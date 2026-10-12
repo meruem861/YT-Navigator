@@ -111,6 +111,7 @@ class YoutubeScraper(BaseYoutubeScraper):
         """
         try:
             logger.info("Starting channel scrape", channel_username=channel_username, videos_limit=videos_limit)
+            self.transcript_scraper.blocked_count = 0
 
             # Get videos from channel
             scrape_results = list(scrapetube.get_channel(channel_username=channel_username, limit=videos_limit))
@@ -164,4 +165,4 @@ class YoutubeScraper(BaseYoutubeScraper):
 
         except Exception as e:
             logger.error("Channel scrape failed", channel_username=channel_username, error=e, traceback=format_exc())
-            return [], []
+            raise RuntimeError(f"Could not read the channel's videos from YouTube ({type(e).__name__}: {e})") from e

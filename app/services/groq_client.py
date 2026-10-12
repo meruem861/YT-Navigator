@@ -34,6 +34,23 @@ class GroqClient:
         """
         self.timeout = timeout
 
+    async def list_models(self) -> List[str]:
+        """Return the model ids available to the configured key (used to check the key in Settings)."""
+        api_key = await aget_value("GROQ_API_KEY")
+        if not api_key:
+            raise GroqError("No Groq API key set.")
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{settings.GROQ_API_URL.rstrip('/')}/models", headers={"Authorization": f"Bearer {api_key}"}
+            )
+        if response.status_code != 200:
+            try:
+                message = response.json()["error"]["message"]
+            except Exception:
+                message = response.text[:300]
+            raise GroqError(message)
+        return [model["id"] for model in response.json().get("data", [])]
+
     async def chat(
         self,
         model: str,

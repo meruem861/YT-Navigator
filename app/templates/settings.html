@@ -36,6 +36,13 @@
                     Save
                 </button>
             </form>
+            <form method="post" action="{% url 'app:test_keys' %}" class="mt-4">
+                {% csrf_token %}
+                <button type="submit"
+                        class="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md text-sm font-medium text-white hover:bg-[#2a2a2a] transition-colors">
+                    Test keys
+                </button>
+            </form>
         </div>
     </div>
 </div>

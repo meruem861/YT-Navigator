@@ -32,6 +32,12 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      - name: Check the built-in API keys
+        env:
+          DEFAULT_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEFAULT_COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+        run: python android/check-keys.py
+
       - name: Build debug APK
         working-directory: android
         env:

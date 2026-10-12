@@ -17,7 +17,10 @@ from .scan import (
     get_channel_information,
     scan_channel,
 )
-from .settings import settings_view
+from .settings import (
+    settings_view,
+    test_keys_view,
+)
 
 __all__ = [
     "home_view",
@@ -32,4 +35,5 @@ __all__ = [
     "chatbot_page",
     "clear_chat_history",
     "settings_view",
+    "test_keys_view",
 ]

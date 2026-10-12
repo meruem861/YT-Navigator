@@ -29,11 +29,11 @@
 
 {% block content %}
     <div class="min-h-screen bg-[var(--bg-color)] text-[var(--text-color)] flex flex-col antialiased overflow-hidden">
-        <main class="container mx-auto max-w-7xl flex-grow px-4 sm:px-6 lg:px-8 py-8 space-y-6 pb-24 flex flex-col overflow-hidden">
-            <div class="grid grid-cols-3 gap-6 h-[calc(100vh-10rem)]">
+        <main class="container mx-auto max-w-7xl flex-grow px-0 sm:px-6 lg:px-8 py-2 lg:py-8 space-y-6 pb-4 lg:pb-24 flex flex-col overflow-hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-13rem)] lg:h-[calc(100vh-10rem)]">
                 <!-- Chat Area - Left Column -->
-                <section class="col-span-2 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden flex flex-col">
-                    <div id="chat-area" class="p-6 overflow-y-auto flex-grow max-h-[calc(100vh-16rem)] space-y-6 custom-scrollbar">
+                <section class="lg:col-span-2 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden flex flex-col min-h-0">
+                    <div id="chat-area" class="p-3 lg:p-6 overflow-y-auto flex-grow min-h-0 lg:max-h-[calc(100vh-16rem)] space-y-6 custom-scrollbar">
                         {% if not chat_history %}
                             <div class="initial-empty-state text-center py-16 opacity-50 space-y-4">
                                 <i class="fas fa-comments text-6xl text-[var(--muted-text-color)] mb-4"></i>
@@ -176,7 +176,7 @@
 
                 <!-- Channel Information - Right Column -->
                 {% if channel %}
-                    <section class="col-span-1 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden">
+                    <section class="hidden lg:block col-span-1 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden">
                         <div id="channel-info-header"
                              class="px-6 py-5 flex justify-between items-center group hover:bg-[#2C2C2C] transition-colors duration-200">
                             <h2 class="text-xl font-semibold text-white flex items-center space-x-3">
@@ -216,7 +216,7 @@
                         </div>
                     </section>
                 {% else %}
-                    <section class="col-span-1 bg-[#1E1E1E] rounded-2xl border border-gray-800 flex items-center justify-center">
+                    <section class="hidden lg:flex col-span-1 bg-[#1E1E1E] rounded-2xl border border-gray-800 items-center justify-center">
                         <div class="bg-yellow-900/20 border-l-4 border-yellow-400 p-5 rounded-lg shadow-md flex items-center space-x-4">
                             <div class="flex-shrink-0">
                                 <i class="fas fa-exclamation-triangle text-yellow-400 text-2xl"></i>
