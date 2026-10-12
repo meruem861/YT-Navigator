@@ -1,6 +1,8 @@
 # Python packages bundled into the APK (Chaquopy). Keep in sync with pyproject.toml.
 # Everything is pure Python except numpy, which Chaquopy provides prebuilt for Android.
 django==5.1.7
+# Android has no system time zone database; Django needs it (zoneinfo)
+tzdata==2025.2
 uvicorn==0.34.0
 whitenoise==6.9.0
 numpy==1.26.2

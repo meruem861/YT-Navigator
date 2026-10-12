@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "django==5.1.7",
+    "tzdata==2025.2",  # time zone database for platforms without one (Android, Windows)
     "uvicorn==0.34.0",
     "whitenoise==6.9.0",
     "numpy",
