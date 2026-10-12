@@ -260,12 +260,22 @@ class ChannelAgent:
         history = await self._load_history(user, REPLY_HISTORY)
         history.append({"role": "user", "content": message})
 
-        route = await self.route_message(channel_info, history[-ROUTER_HISTORY:])
+        try:
+            route = await self.route_message(channel_info, history[-ROUTER_HISTORY:])
+        except Exception as e:
+            # Routing is an optimization: when it fails, answer with the tools
+            logger.warning("Routing failed, using the tools", error=str(e))
+            route = "Yes"
+
+        raw = None
         if route == "Not relevant":
             raw = json.dumps({"placeholder": STATIC_NOT_RELEVANT_REPLY, "videos": []})
         elif route == "No":
-            raw = await self.non_tool_calls_reply(channel, user, history[-ROUTER_HISTORY:])
-        else:
+            try:
+                raw = await self.non_tool_calls_reply(channel, user, history[-ROUTER_HISTORY:])
+            except Exception as e:
+                logger.warning("Direct reply failed, using the tools", error=str(e))
+        if raw is None:
             raw = await self.tool_calls_reply(channel_info, user, history)
 
         answer = parse_answer(raw)

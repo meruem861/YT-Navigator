@@ -4,6 +4,8 @@ The official SDK is avoided on purpose: it pulls native dependencies that are ha
 while the two endpoints used here are simple JSON calls.
 """
 
+import asyncio
+import time
 from typing import (
     List,
     Literal,
@@ -20,6 +22,34 @@ from app.services.app_settings import aget_value
 logger = structlog.get_logger(__name__)
 
 InputType = Literal["search_document", "search_query"]
+
+MAX_RATE_LIMIT_RETRIES = 6
+# Tokens sent in the last minute, shared by all clients: [(monotonic time, estimated tokens)]
+_token_usage: List[Tuple[float, int]] = []
+
+
+def _clock() -> float:
+    return time.monotonic()
+
+
+def estimate_tokens(texts: List[str]) -> int:
+    """Conservative token estimate (non-Latin scripts such as Arabic use more tokens per character)."""
+    return sum(len(text) for text in texts) // 2 + len(texts)
+
+
+async def _wait_for_token_budget(tokens: int) -> None:
+    """Pace requests to stay under the per-minute token limit of Cohere trial keys."""
+    limit = settings.COHERE_TOKENS_PER_MINUTE
+    while True:
+        now = _clock()
+        _token_usage[:] = [(t, n) for t, n in _token_usage if now - t < 60]
+        used = sum(n for _, n in _token_usage)
+        if not _token_usage or used + tokens <= limit:
+            break
+        wait = 60 - (now - _token_usage[0][0]) + 0.5
+        logger.info("Pacing Cohere requests to respect the token rate limit", wait_seconds=round(wait, 1))
+        await asyncio.sleep(wait)
+    _token_usage.append((_clock(), tokens))
 
 
 class CohereError(RuntimeError):
@@ -47,16 +77,26 @@ class CohereClient:
         if not api_key:
             raise CohereError("No Cohere API key set. Add one in Settings.")
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/{path}",
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-            )
+        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/{path}",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                )
+            if response.status_code != 429 or attempt == MAX_RATE_LIMIT_RETRIES:
+                break
+            # Rate limited (trial keys): wait for the per-minute window to reset, then retry
+            try:
+                wait = float(response.headers.get("Retry-After", 61))
+            except ValueError:
+                wait = 61
+            logger.warning("Cohere rate limit reached, retrying", path=path, wait_seconds=wait, attempt=attempt + 1)
+            await asyncio.sleep(wait)
 
         if response.status_code != 200:
             logger.error("Cohere API error", path=path, status_code=response.status_code, body=response.text[:500])
@@ -77,9 +117,8 @@ class CohereClient:
             return np.zeros((0, 0), dtype=np.float32)
 
         vectors = []
-        batch_size = settings.EMBEDDING_BATCH_SIZE
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+        for batch in self._batches(texts):
+            await _wait_for_token_budget(estimate_tokens(batch))
             data = await self._post(
                 "embed",
                 {
@@ -90,9 +129,23 @@ class CohereClient:
                 },
             )
             vectors.extend(data["embeddings"]["float"])
-            logger.debug("Embedded batch", batch_start=i, batch_size=len(batch))
+            logger.debug("Embedded batch", embedded=len(vectors), total=len(texts))
 
         return np.asarray(vectors, dtype=np.float32)
+
+    @staticmethod
+    def _batches(texts: List[str]) -> List[List[str]]:
+        """Split texts into batches of at most EMBEDDING_BATCH_SIZE texts and a quarter of the token budget."""
+        max_tokens = max(1, settings.COHERE_TOKENS_PER_MINUTE // 4)
+        batches, batch = [], []
+        for text in texts:
+            if batch and (len(batch) >= settings.EMBEDDING_BATCH_SIZE or estimate_tokens(batch + [text]) > max_tokens):
+                batches.append(batch)
+                batch = []
+            batch.append(text)
+        if batch:
+            batches.append(batch)
+        return batches
 
     async def embed_query(self, query: str) -> np.ndarray:
         """Embed a single search query."""

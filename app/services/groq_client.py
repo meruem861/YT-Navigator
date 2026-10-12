@@ -3,6 +3,8 @@
 Used instead of LangChain so the app only needs pure-Python packages and can be bundled into an Android APK.
 """
 
+import asyncio
+import re
 import time
 from typing import (
     Any,
@@ -28,6 +30,8 @@ class GroqError(RuntimeError):
 # Models that are not general chat models
 NON_CHAT_MODEL_MARKERS = ("whisper", "tts", "guard", "playai", "orpheus", "distil", "compound", "allam")
 MODELS_CACHE_SECONDS = 3600
+MAX_RETRIES = 2
+NO_TOOLS_REMINDER = "Do not call any tool or function. Reply directly with the requested content."
 _models_cache: Dict[str, Tuple[float, List[str]]] = {}
 
 
@@ -110,29 +114,46 @@ class GroqClient:
         if not api_key:
             raise GroqError("No Groq API key set. Add one in Settings.")
 
-        payload: Dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
+        payload: Dict[str, Any] = {"model": model, "messages": list(messages), "temperature": temperature}
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{settings.GROQ_API_URL.rstrip('/')}/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            )
+        for attempt in range(MAX_RETRIES + 1):
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{settings.GROQ_API_URL.rstrip('/')}/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                )
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]
 
-        if response.status_code != 200:
             try:
                 message = response.json()["error"]["message"]
             except Exception:
                 message = response.text[:300]
-            logger.error("Groq API error", status_code=response.status_code, error=message)
-            if response.status_code == 404 or "model" in message.lower():
-                # The model may have been retired: list the models again next time
-                _models_cache.clear()
-            raise GroqError(message)
+            logger.error("Groq API error", status_code=response.status_code, error=message, attempt=attempt + 1)
+            if attempt == MAX_RETRIES:
+                break
 
-        return response.json()["choices"][0]["message"]
+            if "called a tool" in message and not tools:
+                # Some models (e.g. gpt-oss) try to call a tool when none is offered: ask again, explicitly
+                payload["messages"] = payload["messages"] + [{"role": "system", "content": NO_TOOLS_REMINDER}]
+                payload["temperature"] = 0.3
+            elif response.status_code == 429:
+                # Rate limit: Groq says how long to wait ("Please try again in 1m2.5s"); wait if it is short
+                match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", message)
+                wait = (int(match.group(1) or 0) * 60 + float(match.group(2))) if match else 5.0
+                if wait > 30:
+                    break
+                await asyncio.sleep(wait + 0.5)
+            else:
+                break
+
+        if response.status_code == 404 or "does not exist" in message or "decommissioned" in message:
+            # The model may have been retired: list the models again next time
+            _models_cache.clear()
+        raise GroqError(message)

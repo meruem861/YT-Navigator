@@ -136,3 +136,20 @@ def test_parse_answer_handles_fences_and_plain_text():
         }
     ]
     assert parse_answer("just text") == {"placeholder": "just text", "videos": []}
+
+
+class FailingRouterGroq(FakeGroq):
+    async def chat(self, model, messages, tools=None, json_mode=False, temperature=0.0):
+        if model == "instant-model":
+            from app.services.groq_client import GroqError
+
+            raise GroqError("Tool choice is none, but model called a tool")
+        return await super().chat(model, messages, tools, json_mode, temperature)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_router_failure_falls_back_to_tools(user, channel_with_videos):
+    agent = ChannelAgent(client=FailingRouterGroq(assistant(json.dumps({"placeholder": "Answer", "videos": []}))))
+    response = json.loads(await agent.process_message("What is the channel's focus?", channel_with_videos, user))
+    assert "Answer" in response["placeholder"]

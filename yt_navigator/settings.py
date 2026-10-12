@@ -229,17 +229,22 @@ COHERE_API_URL = os.getenv("COHERE_API_URL", "https://api.cohere.com/v2")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "embed-v4.0")
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", 96))  # Cohere accepts up to 96 texts per call
 RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "rerank-v3.5")
+# Trial keys allow 100k tokens/minute for embeddings; stay below it (raise it for production keys)
+COHERE_TOKENS_PER_MINUTE = int(os.getenv("COHERE_TOKENS_PER_MINUTE", 80000))
 
 # Groq retires models regularly, so the app picks, at runtime, the first of these candidates that the key can use
 # (and any available chat model as a last resort). INSTANT_LLM / POWERFUL_LLM force a specific model.
 INSTANT_LLM = os.getenv("INSTANT_LLM", "")
 POWERFUL_LLM = os.getenv("POWERFUL_LLM", "")
+# Used without tools and with JSON output: prefer models that never emit spontaneous tool calls (gpt-oss may)
 INSTANT_LLM_CANDIDATES = [
     "llama-3.1-8b-instant",
-    "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
-    "openai/gpt-oss-120b",
     "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "moonshotai/kimi-k2-instruct-0905",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
 ]
 # Used with tool calling: keep models that support it
 POWERFUL_LLM_CANDIDATES = [
