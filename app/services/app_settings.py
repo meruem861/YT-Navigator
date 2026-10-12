@@ -10,6 +10,8 @@ from app.models import AppSetting
 
 EDITABLE_KEYS = {
     "GROQ_API_KEY": "Groq API key",
+    "GEMINI_API_KEY": "Gemini API key",
+    "ANTHROPIC_API_KEY": "Claude (Anthropic) API key",
     "COHERE_API_KEY": "Cohere API key",
 }
 

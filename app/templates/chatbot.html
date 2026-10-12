@@ -1,542 +1,349 @@
-<!DOCTYPE html>
 {% extends "base.html" %}
 
-{% block title %}
-    Chatbot
-{% endblock title %}
-
-{% block extra_head %}
-    <!-- Marked library for markdown parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        // Fallback markdown parsing if marked is not loaded
-        if (typeof marked === 'undefined') {
-            window.marked = {
-                parse: function(text) {
-                    // Simple markdown-like parsing
-                    return text
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                        .replace(/_(.*?)_/g, '<em>$1</em>')
-                        .replace(/`(.*?)`/g, '<code>$1</code>')
-                        .replace(/\n/g, '<br>');
-                }
-            };
-        }
-    </script>
-{% endblock extra_head %}
+{% block title %}Chat{% endblock title %}
 
 {% block content %}
-    <div class="min-h-screen bg-[var(--bg-color)] text-[var(--text-color)] flex flex-col antialiased overflow-hidden">
-        <main class="container mx-auto max-w-7xl flex-grow px-0 sm:px-6 lg:px-8 py-2 lg:py-8 space-y-6 pb-4 lg:pb-24 flex flex-col overflow-hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-13rem)] lg:h-[calc(100vh-10rem)]">
-                <!-- Chat Area - Left Column -->
-                <section class="lg:col-span-2 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden flex flex-col min-h-0">
-                    <div id="chat-area" class="p-3 lg:p-6 overflow-y-auto flex-grow min-h-0 lg:max-h-[calc(100vh-16rem)] space-y-6 custom-scrollbar">
-                        {% if not chat_history %}
-                            <div class="initial-empty-state text-center py-16 opacity-50 space-y-4">
-                                <i class="fas fa-comments text-6xl text-[var(--muted-text-color)] mb-4"></i>
-                                <p class="text-[var(--muted-text-color)] text-xl font-light tracking-wide">Start exploring channel content</p>
-                            </div>
-                            <div class="flex mb-6 animate-fade-in">
-                                <div class="mr-3 flex-shrink-0">
-                                    <div class="w-8 h-8 rounded-full bg-rose-600 flex items-center justify-center">
-                                        <i class="fab fa-youtube text-white text-sm"></i>
-                                    </div>
-                                </div>
-                                <div class="py-3 px-4 bg-[#2C2C2C] rounded-2xl text-white max-w-2xl">
-                                    How can I help you explore this YouTube channel's content?
-                                </div>
-                            </div>
-                            <div class="flex flex-col space-y-3 items-center justify-center mb-6 pre-prompts-section">
-                                <div class="text-[var(--muted-text-color)] text-sm mb-2">Try one of these quick prompts:</div>
-                                <div class="flex space-x-3 flex-wrap justify-center gap-3">
-                                    <button class="quick-prompt-btn px-4 py-2 bg-rose-900 bg-opacity-30 text-rose-300 rounded-lg text-sm hover:bg-rose-900 hover:text-white transition-all duration-300 max-w-xs text-center whitespace-normal break-words">
-                                        What is the channel's focus?
-                                    </button>
-                                    <button class="quick-prompt-btn px-4 py-2 bg-rose-900 bg-opacity-30 text-rose-300 rounded-lg text-sm hover:bg-rose-900 hover:text-white transition-all duration-300 max-w-xs text-center whitespace-normal break-words">
-                                        Best Moments of the channel
-                                    </button>
-                                    <button class="quick-prompt-btn px-4 py-2 bg-rose-900 bg-opacity-30 text-rose-300 rounded-lg text-sm hover:bg-rose-900 hover:text-white transition-all duration-300 max-w-xs text-center whitespace-normal break-words">
-                                        Most funniest videos of the channel
-                                    </button>
-                                </div>
-                            </div>
-                        {% else %}
-                            {% for message in chat_history %}
-                                {% if message.type == 'human' %}
-                                    <div class="flex justify-end mb-6 animate-fade-in">
-                                        <div class="ml-2 py-3 px-4 bg-rose-900 bg-opacity-30 rounded-2xl text-white max-w-2xl">
-                                            <p class="text-sm">{{ message.placeholder|safe }}</p>
-                                        </div>
-                                        <div class="ml-3 flex-shrink-0">
-                                            <div class="w-8 h-8 rounded-full bg-rose-900 bg-opacity-30 flex items-center justify-center">
-                                                <i class="fas fa-user text-rose-500 text-sm"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                {% elif message.type == 'ai' and message.placeholder %}
-                                    <div class="flex mb-6 animate-fade-in">
-                                        <div class="mr-3 flex-shrink-0">
-                                            <div class="w-8 h-8 rounded-full bg-rose-600 flex items-center justify-center">
-                                                <i class="fab fa-youtube text-white text-sm"></i>
-                                            </div>
-                                        </div>
-                                        <div class="py-3 px-4 bg-[#2C2C2C] rounded-2xl text-white max-w-2xl">
-                                            {{ message.placeholder|safe }}
-                                            {% if message.response_time %}
-                                                <div class="mt-2 text-xs text-[var(--muted-text-color)] flex items-center">
-                                                    <i class="fas fa-clock mr-1"></i>
-                                                    <span>Response time: {{ message.response_time }}s</span>
-                                                </div>
-                                            {% endif %}
-                                            {% if message.videos %}
-                                                <div class="mt-6 space-y-4">
-                                                    <h3 class="text-sm font-medium text-white border-b border-gray-700 pb-2">Related Videos</h3>
-                                                    {% for video in message.videos %}
-                                                        <div class="bg-[#1E1E1E] rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
-                                                            <div class="flex space-x-4">
-                                                                <a href="https://www.youtube.com/watch?v={{ video.id }}"
-                                                                   target="_blank"
-                                                                   class="flex-shrink-0">
-                                                                    <img src="{{ video.thumbnail_url }}"
-                                                                         alt="{{ video.title }}"
-                                                                         class="w-32 h-18 object-cover"
-                                                                         width="128" height="72"/>
-                                                                </a>
-                                                                <div class="py-2 pr-4 flex-1">
-                                                                    <a href="https://www.youtube.com/watch?v={{ video.id }}"
-                                                                       target="_blank"
-                                                                       class="font-medium text-sm text-white hover:text-rose-500 transition-colors line-clamp-2 mb-2">
-                                                                        {{ video.title }}
-                                                                    </a>
-                                                                    {% if video.description %}
-                                                                        <p class="text-xs text-[var(--muted-text-color)] mb-2 line-clamp-2">
-                                                                            {{ video.description }}
-                                                                        </p>
-                                                                    {% endif %}
-                                                                    {% if video.timestamps %}
-                                                                        <div class="space-y-1">
-                                                                            {% for ts in video.timestamps %}
-                                                                                <a href="https://www.youtube.com/watch?v={{ video.id }}&t={{ ts.start_seconds }}s"
-                                                                                   target="_blank"
-                                                                                   class="block text-xs text-[var(--muted-text-color)] hover:text-rose-500 transition-colors">
-                                                                                    <span class="font-medium">{{ ts.start }} - {{ ts.end }}</span>
-                                                                                    <span class="mx-1">•</span>
-                                                                                    {{ ts.description }}
-                                                                                </a>
-                                                                            {% endfor %}
-                                                                        </div>
-                                                                    {% endif %}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    {% endfor %}
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
-                    </div>
+<style>
+    /* Full-height chat between the top bar (3.5rem) and the bottom tab bar on phones (3.5rem) */
+    body { overflow: hidden; }
+    footer { display: none; }
+    .chat-shell {
+        position: fixed; top: 3.5rem; bottom: 3.5rem; left: 0; right: 0;
+        display: flex; flex-direction: column; background: #1f1e1d; color: #ececec;
+    }
+    @media (min-width: 768px) { .chat-shell { bottom: 0; } }
 
-                    <!-- Fixed Input Area -->
-                    <div class="border-t border-gray-700 p-4 bg-[#2C2C2C]">
-                        <form id="chat-form" method="post" class="relative w-full" action="{% url 'app:send_message' %}" novalidate>
-                            {% csrf_token %}
-                            <div class="flex items-center space-x-3">
-                                <div class="flex-grow">
-                                    <input type="text"
-                                           id="chat-input"
-                                           name="message"
-                                           class="w-full px-4 py-2.5 text-sm border border-gray-700 bg-[#1E1E1E] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent placeholder-[var(--muted-text-color)] transition-all duration-300"
-                                           placeholder="Ask about the channel's content..."
-                                           autocomplete="off"
-                                           required
-                                           minlength="1"/>
-                                </div>
-                                <div>
-                                    <button type="submit"
-                                            id="send-btn"
-                                            class="inline-flex items-center justify-center w-12 h-12 text-rose-500 bg-rose-950 rounded-xl hover:bg-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all duration-300 group">
-                                        <i id="send-btn-icon" class="fas fa-paper-plane text-lg opacity-70 group-hover:opacity-100 transition-opacity"></i>
-                                        <i id="send-btn-loading" class="hidden fas fa-circle-notch fa-spin text-lg opacity-70"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                        <div id="progress-indicator" class="hidden mt-2 text-xs text-[var(--muted-text-color)] text-center flex items-center justify-center space-x-2">
-                            <i class="fas fa-circle-notch fa-spin text-rose-500 text-sm"></i>
-                            <span>Processing your message... (Please don't refresh the page)</span>
-                        </div>
-                    </div>
-                </section>
+    .chat-topbar {
+        display: flex; align-items: center; gap: .6rem; padding: .55rem 1rem;
+        border-bottom: 1px solid #2c2b29; background: #1f1e1d;
+    }
+    .chat-topbar img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+    .chat-topbar .title { flex: 1; min-width: 0; font-size: .9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .icon-btn {
+        display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .7rem; border-radius: .6rem;
+        border: 1px solid #3a3936; color: #d6d4cf; font-size: .8rem; background: transparent;
+    }
+    .icon-btn:hover { background: #2a2927; }
 
-                <!-- Channel Information - Right Column -->
-                {% if channel %}
-                    <section class="hidden lg:block col-span-1 bg-[#1E1E1E] rounded-2xl shadow-xl border border-gray-800 overflow-hidden">
-                        <div id="channel-info-header"
-                             class="px-6 py-5 flex justify-between items-center group hover:bg-[#2C2C2C] transition-colors duration-200">
-                            <h2 class="text-xl font-semibold text-white flex items-center space-x-3">
-                                <i class="fab fa-youtube text-rose-500 text-2xl"></i>
-                                <span class="tracking-tight">Channel Information</span>
-                            </h2>
-                        </div>
-                        <div id="channel-info-content"
-                             class="border-t border-gray-700 max-h-screen overflow-visible transition-all duration-300 ease-in-out">
-                            <div class="p-8 space-y-6">
-                                <div class="flex flex-col items-center space-y-6">
-                                    {% if channel.profile_image_url %}
-                                        <img src="{{ channel.profile_image_url }}" alt="Channel Profile"
-                                             class="w-32 h-32 rounded-full border-4 border-rose-500 shadow-lg object-cover ring-4 ring-rose-900/50 transform transition-transform hover:scale-105" width="128" height="128"/>
-                                    {% else %}
-                                        <div class="w-32 h-32 rounded-full bg-gray-700 flex items-center justify-center border-4 border-rose-500 shadow-lg ring-4 ring-rose-900/50">
-                                            <i class="fas fa-user text-[var(--muted-text-color)] text-4xl"></i>
-                                        </div>
-                                    {% endif %}
-                                    <div class="text-center space-y-3 w-full">
-                                        <h3 class="text-2xl font-bold text-white tracking-tight">{{ channel.name }}</h3>
-                                        <p class="text-sm text-rose-300 mb-2">@{{ channel.username }}</p>
-                                        <p class="text-sm text-[var(--muted-text-color)] mb-4 line-clamp-4 px-4">{{ channel.description }}</p>
-                                        <a href="https://www.youtube.com/channel/{{ channel.id }}" target="_blank"
-                                           class="inline-flex items-center px-5 py-2.5 bg-rose-900 text-rose-300 rounded-lg hover:bg-rose-800 hover:text-rose-200 transition-all duration-300 group">
-                                            <i class="fas fa-external-link-alt mr-3 opacity-70 group-hover:opacity-100 transition-opacity"></i>
-                                            View Channel
-                                        </a>
+    .chat-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+    .chat-column { max-width: 46rem; margin: 0 auto; padding: 1.25rem 1rem 1.5rem; }
 
-                                        <button id="clear-history-btn" class="mt-2 text-sm text-rose-500 hover:text-rose-300 transition-colors">
-                                            <i class="fas fa-trash mr-1"></i>
-                                            Clear History
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                {% else %}
-                    <section class="hidden lg:flex col-span-1 bg-[#1E1E1E] rounded-2xl border border-gray-800 items-center justify-center">
-                        <div class="bg-yellow-900/20 border-l-4 border-yellow-400 p-5 rounded-lg shadow-md flex items-center space-x-4">
-                            <div class="flex-shrink-0">
-                                <i class="fas fa-exclamation-triangle text-yellow-400 text-2xl"></i>
-                            </div>
-                            <div>
-                                <p class="text-sm text-yellow-100">No channel information available. Select a channel to begin.</p>
-                            </div>
-                        </div>
-                    </section>
-                {% endif %}
-            </div>
-        </main>
+    .msg { margin-bottom: 1.6rem; animation: fadein .2s ease-out; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .msg-user { display: flex; justify-content: flex-end; }
+    .msg-user .bubble {
+        background: #34332f; color: #f2f1ee; padding: .65rem 1rem; border-radius: 1.2rem;
+        max-width: 85%; font-size: .97rem; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
+    }
+    .msg-ai .who { display: flex; align-items: center; gap: .45rem; margin-bottom: .45rem; font-size: .8rem; color: #a8a6a0; }
+    .msg-ai .who .logo { width: 22px; height: 22px; border-radius: 6px; background: #e11d48; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .7rem; }
+
+    /* Answer text */
+    .md { font-size: 1rem; line-height: 1.7; color: #ececec; word-wrap: break-word; }
+    .md p { margin: 0 0 .85rem; }
+    .md p:last-child { margin-bottom: 0; }
+    .md ul, .md ol { margin: 0 0 .85rem 1.3rem; }
+    .md ul { list-style: disc; } .md ol { list-style: decimal; }
+    .md li { margin: .25rem 0; }
+    .md strong { color: #fff; font-weight: 600; }
+    .md a { color: #fb7185; text-decoration: underline; }
+    .md h1, .md h2, .md h3 { color: #fff; font-weight: 600; margin: 1rem 0 .5rem; }
+    .md code { background: #2c2b29; padding: .1rem .35rem; border-radius: .3rem; font-size: .88em; }
+    .md pre { background: #2c2b29; padding: .8rem; border-radius: .6rem; overflow-x: auto; margin-bottom: .85rem; }
+    .md blockquote { border-left: 3px solid #4a4945; padding-left: .8rem; color: #c9c7c1; }
+
+    .msg-actions { margin-top: .5rem; display: flex; gap: .25rem; }
+    .msg-actions button { font-size: .75rem; color: #8f8d87; padding: .2rem .45rem; border-radius: .4rem; }
+    .msg-actions button:hover { background: #2a2927; color: #d6d4cf; }
+
+    /* Video cards */
+    .videos { margin-top: 1rem; display: grid; gap: .6rem; }
+    .video { display: flex; gap: .75rem; padding: .6rem; border: 1px solid #2f2e2b; border-radius: .9rem; background: #262523; }
+    .video img { width: 112px; height: 63px; object-fit: cover; border-radius: .5rem; flex-shrink: 0; background: #333; }
+    .video .info { min-width: 0; flex: 1; }
+    .video .vtitle { font-size: .88rem; font-weight: 500; color: #f2f1ee; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .video .vdesc { font-size: .78rem; color: #a8a6a0; margin-top: .2rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+    .chip { font-size: .72rem; padding: .2rem .55rem; border-radius: 999px; background: #3a1f26; color: #fda4af; white-space: nowrap; }
+
+    /* Errors and typing indicator */
+    .msg-error { border: 1px solid #5b2a2a; background: #2b1d1d; color: #fecaca; padding: .7rem .9rem; border-radius: .8rem; font-size: .88rem; }
+    .typing { display: flex; align-items: center; gap: .6rem; color: #a8a6a0; font-size: .85rem; }
+    .dots span { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: #e11d48; animation: blink 1.2s infinite ease-in-out; }
+    .dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: none; } }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 12vh 0 1rem; }
+    .empty h1 { font-size: 1.5rem; font-weight: 600; color: #f2f1ee; margin-bottom: .4rem; }
+    .empty p { color: #a8a6a0; font-size: .92rem; margin-bottom: 1.4rem; }
+    .suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; text-align: left; }
+    @media (max-width: 420px) { .suggestions { grid-template-columns: 1fr; } }
+    .suggestion { border: 1px solid #34332f; background: #262523; color: #d6d4cf; padding: .75rem .9rem; border-radius: .9rem; font-size: .88rem; text-align: left; }
+    .suggestion:hover { border-color: #4a4945; }
+
+    /* Composer */
+    .composer-wrap { padding: .5rem 1rem .8rem; background: linear-gradient(to top, #1f1e1d 70%, rgba(31, 30, 29, 0)); }
+    .composer {
+        max-width: 46rem; margin: 0 auto; display: flex; align-items: flex-end; gap: .5rem;
+        background: #2a2927; border: 1px solid #3a3936; border-radius: 1.4rem; padding: .45rem .45rem .45rem 1rem;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, .25);
+    }
+    .composer:focus-within { border-color: #5a5853; }
+    .composer textarea {
+        flex: 1; resize: none; border: 0; outline: none; background: transparent; color: #f2f1ee;
+        font-size: 1rem; line-height: 1.45; max-height: 9.5rem; padding: .45rem 0;
+    }
+    .composer textarea::placeholder { color: #8f8d87; }
+    .send {
+        width: 2.3rem; height: 2.3rem; border-radius: 50%; border: 0; background: #e11d48; color: #fff;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .15s;
+    }
+    .send:disabled { opacity: .35; }
+    .disclaimer { text-align: center; color: #75736d; font-size: .7rem; margin-top: .4rem; }
+</style>
+
+<div class="chat-shell">
+    <div class="chat-topbar">
+        {% if channel %}
+            <img src="{{ channel.profile_image_url }}" alt="" onerror="this.style.display='none'">
+            <div class="title" dir="auto">{{ channel.name }}</div>
+        {% else %}
+            <div class="title">Chat</div>
+        {% endif %}
+        <button type="button" class="icon-btn" id="new-chat" title="Start a new conversation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New chat
+        </button>
     </div>
 
-    <style>
-        /* Custom scrollbar styles */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 10px;
+    <div class="chat-scroll" id="chat-scroll">
+        <div class="chat-column" id="chat-column">
+            <div class="empty" id="empty-state">
+                {% if channel %}
+                    <h1>What do you want to know?</h1>
+                    <p dir="auto">Ask anything about {{ channel.name }}'s videos.</p>
+                    <div class="suggestions">
+                        <button type="button" class="suggestion">What topics does this channel cover?</button>
+                        <button type="button" class="suggestion">Summarize the latest video</button>
+                        <button type="button" class="suggestion">What are the main ideas discussed recently?</button>
+                        <button type="button" class="suggestion">Which video should I watch first?</button>
+                    </div>
+                {% else %}
+                    <h1>Connect a channel first</h1>
+                    <p>Go to Home, connect a YouTube channel and scan its videos.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="composer-wrap">
+        <form class="composer" id="chat-form" autocomplete="off">
+            {% csrf_token %}
+            <textarea id="chat-input" rows="1" dir="auto" placeholder="Ask about the channel…" {% if not channel %}disabled{% endif %}></textarea>
+            <button type="submit" class="send" id="send-btn" disabled aria-label="Send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+        </form>
+        <div class="disclaimer">Answers come from the scanned videos and can contain mistakes.</div>
+    </div>
+</div>
+
+{{ chat_history|json_script:"chat-history" }}
+
+<script>
+(function () {
+    const column = document.getElementById('chat-column');
+    const scroller = document.getElementById('chat-scroll');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const emptyState = document.getElementById('empty-state');
+    const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+    let busy = false;
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    function scrollToBottom() { scroller.scrollTop = scroller.scrollHeight; }
+
+    function hideEmpty() { if (emptyState) emptyState.style.display = 'none'; }
+
+    function addUser(text) {
+        hideEmpty();
+        const msg = el('div', 'msg msg-user');
+        const bubble = el('div', 'bubble', text);
+        bubble.dir = 'auto';
+        msg.appendChild(bubble);
+        column.appendChild(msg);
+        scrollToBottom();
+    }
+
+    function header() {
+        const who = el('div', 'who');
+        const logo = el('span', 'logo', '▶');
+        who.appendChild(logo);
+        who.appendChild(el('span', '', 'YT Navigator'));
+        return who;
+    }
+
+    function videoCard(video) {
+        const card = el('div', 'video');
+        const url = 'https://www.youtube.com/watch?v=' + encodeURIComponent(video.id);
+        const thumbLink = el('a');
+        thumbLink.href = url; thumbLink.target = '_blank';
+        const img = el('img');
+        img.src = video.thumbnail_url || ''; img.alt = ''; img.loading = 'lazy';
+        thumbLink.appendChild(img);
+        card.appendChild(thumbLink);
+
+        const info = el('div', 'info');
+        const title = el('a', 'vtitle', video.title || 'Video');
+        title.href = url; title.target = '_blank'; title.dir = 'auto';
+        info.appendChild(title);
+        if (video.description) {
+            const desc = el('div', 'vdesc', video.description);
+            desc.dir = 'auto';
+            info.appendChild(desc);
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #2C2C2C;
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #6B2E4A; /* Deep rose color */
-            border-radius: 10px;
-            border: 2px solid #2C2C2C;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #8B3D5F; /* Lighter rose color on hover */
-        }
-
-        /* Remove global scrollbar */
-        body, html {
-            overflow: hidden;
-            overscroll-behavior: none;
-        }
-
-        /* Error message styles */
-        .error-message {
-            background-color: rgba(220, 38, 38, 0.1);
-            border-left: 4px solid rgb(220, 38, 38);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            color: rgb(254, 202, 202);
-        }
-
-        .rate-limit-error {
-            background-color: rgba(234, 179, 8, 0.1);
-            border-left-color: rgb(234, 179, 8);
-            color: rgb(253, 224, 71);
-        }
-
-        .error-message i {
-            margin-right: 0.75rem;
-            font-size: 1.25rem;
-        }
-    </style>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const chatForm = document.getElementById('chat-form');
-            const chatInput = document.getElementById('chat-input');
-            const chatArea = document.getElementById('chat-area');
-            const clearHistoryBtn = document.getElementById('clear-history-btn');
-
-            // Focus the chat input when the page loads
-            chatInput.focus();
-
-            // Scroll chat area to bottom on page load
-            if (chatArea) {
-                chatArea.scrollTop = chatArea.scrollHeight;
-            }
-
-            // Function to add a message to the chat area
-            function addMessageToChatArea(message, isUser = false, videos = [], responseTime = null) {
-                // Remove initial empty state if it exists
-                const initialEmptyState = chatArea.querySelector('.initial-empty-state');
-                if (initialEmptyState) {
-                    initialEmptyState.remove();
-                }
-
-                // Remove pre-prompts if they exist
-                const prePromptsSection = chatArea.querySelector('.pre-prompts-section');
-                if (prePromptsSection) {
-                    prePromptsSection.remove();
-                }
-
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('flex', 'mb-6', 'animate-fade-in');
-
-                if (isUser) {
-                    // User message styling
-                    messageDiv.classList.add('justify-end');
-                    messageDiv.innerHTML = `
-                            <div class="ml-2 py-3 px-4 bg-rose-900 bg-opacity-30 rounded-2xl text-white max-w-2xl">
-                                <p class="text-sm">${message}</p>
-                            </div>
-                            <div class="ml-3 flex-shrink-0">
-                                <div class="w-8 h-8 rounded-full bg-rose-900 bg-opacity-30 flex items-center justify-center">
-                                    <i class="fas fa-user text-rose-500 text-sm"></i>
-                                </div>
-                            </div>
-                    `;
-                } else {
-                    // AI message styling with optional video rendering
-                    let videoHTML = '';
-                    if (videos && videos.length > 0) {
-                        videoHTML = `
-                            <div class="mt-6 space-y-4">
-                                <h3 class="text-sm font-medium text-white border-b border-gray-700 pb-2">Related Videos</h3>
-                                ${videos.map(video => `
-                                    <div class="bg-[#1E1E1E] rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
-                                        <div class="flex space-x-4">
-                                            <a href="https://www.youtube.com/watch?v=${video.id}"
-                                               target="_blank"
-                                               class="flex-shrink-0">
-                                                <img src="${video.thumbnail_url}"
-                                                     alt="${video.title}"
-                                                     class="w-32 h-18 object-cover"
-                                                     width="128" height="72"/>
-                                            </a>
-                                            <div class="py-2 pr-4 flex-1">
-                                                <a href="https://www.youtube.com/watch?v=${video.id}"
-                                                   target="_blank"
-                                                   class="font-medium text-sm text-white hover:text-rose-500 transition-colors line-clamp-2 mb-2">
-                                                    ${video.title}
-                                                </a>
-                                                ${video.description ? `
-                                                    <p class="text-xs text-[var(--muted-text-color)] mb-2 line-clamp-2">
-                                                        ${video.description}
-                                                    </p>
-                                                ` : ''}
-                                                ${video.timestamps ? `
-                                                    <div class="space-y-1">
-                                                        ${video.timestamps.map(ts => `
-                                                            <a href="https://www.youtube.com/watch?v=${video.id}&t=${ts.start_seconds}s"
-                                                               target="_blank"
-                                                               class="block text-xs text-[var(--muted-text-color)] hover:text-rose-500 transition-colors">
-                                                                <span class="font-medium">${ts.start} - ${ts.end}</span>
-                                                                <span class="mx-1">•</span>
-                                                                ${ts.description}
-                                                            </a>
-                                                        `).join('')}
-                                                    </div>
-                                                ` : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `;
-                    }
-
-                    messageDiv.innerHTML = `
-                        <div class="flex mb-6 animate-fade-in">
-                            <div class="mr-3 flex-shrink-0">
-                                <div class="w-8 h-8 rounded-full bg-rose-600 flex items-center justify-center">
-                                    <i class="fab fa-youtube text-white text-sm"></i>
-                                </div>
-                            </div>
-                            <div class="py-3 px-4 bg-[#2C2C2C] rounded-2xl text-white max-w-2xl">
-                                ${marked.parse(message)}
-                                ${responseTime ? `
-                                    <div class="mt-2 text-xs text-[var(--muted-text-color)] flex items-center">
-                                        <i class="fas fa-clock mr-1"></i>
-                                        <span>Response time: ${responseTime.toFixed(2)}s</span>
-                                    </div>
-                                ` : ''}
-                                ${videoHTML}
-                            </div>
-                        </div>
-                    `;
-                }
-
-                chatArea.appendChild(messageDiv);
-                chatArea.scrollTop = chatArea.scrollHeight;
-            }
-
-            // Function to handle chat submission
-            async function handleChatSubmission(event) {
-                event.preventDefault();
-                const message = chatInput.value.trim();
-
-                if (!message) {
-                    alert('Please enter a message');
-                    return;
-                }
-
-                // Add user message to chat area
-                addMessageToChatArea(message, true);
-
-                // Start timing the request
-                const startTime = performance.now();
-
-                // Disable input during processing
-                chatInput.disabled = true;
-                document.getElementById('send-btn').disabled = true;
-                document.getElementById('send-btn-icon').classList.add('hidden');
-                document.getElementById('send-btn-loading').classList.remove('hidden');
-                document.getElementById('progress-indicator').classList.remove('hidden');
-
-                try {
-                    const formData = new FormData(chatForm);
-                    formData.append('message', message);
-                    const response = await fetch('{% url "app:send_message" %}', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    let data = await response.json();
-
-                    if (data.error) {
-                        throw {
-                            status: response.status,
-                            response: data.response
-                        };
-                    }
-
-                    // Calculate response time
-                    const endTime = performance.now();
-                    const responseTime = (endTime - startTime) / 1000;  // Convert to seconds
-
-                    // str to dict
-                    data = JSON.parse(data);
-                    console.log(data);
-
-                    // Add AI response to chat area
-                    addMessageToChatArea(data.placeholder, false, data.videos, responseTime);
-
-                } catch (error) {
-                    console.error('Chat error:', error);
-                    let errorMessage = error.response;
-                    let errorStatus = error.status;
-
-                    // If error doesn't have response/status (e.g. network error), use defaults
-                    if (!errorMessage) {
-                        errorMessage = 'Network error occurred. Please check your connection.';
-                        errorStatus = 0;
-                    }
-
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = `error-message ${errorStatus === 429 ? 'rate-limit-error' : ''}`;
-
-                    const icon = document.createElement('i');
-                    icon.className = `fas ${errorStatus === 429 ? 'fa-clock' : 'fa-exclamation-circle'} mr-2`;
-                    errorDiv.appendChild(icon);
-
-                    const messageText = document.createTextNode(errorMessage);
-                    errorDiv.appendChild(messageText);
-
-                    const messageContainer = document.createElement('div');
-                    messageContainer.className = 'flex mb-6 animate-fade-in';
-                    messageContainer.appendChild(errorDiv);
-
-                    chatArea.appendChild(messageContainer);
-                    chatArea.scrollTop = chatArea.scrollHeight;
-                } finally {
-                    // Re-enable input
-                    chatInput.disabled = false;
-                    document.getElementById('send-btn').disabled = false;
-                    document.getElementById('send-btn-icon').classList.remove('hidden');
-                    document.getElementById('send-btn-loading').classList.add('hidden');
-                    document.getElementById('progress-indicator').classList.add('hidden');
-                    chatInput.value = '';
-                    // Focus the input after request is complete
-                    chatInput.focus();
-                }
-            }
-
-            // Event listener for chat form submission
-            chatForm.addEventListener('submit', handleChatSubmission);
-
-            // Clear history button event listener
-            clearHistoryBtn.addEventListener('click', async function(event) {
-                event.preventDefault();
-
-                const confirmClear = confirm('Are you sure you want to clear chat history?');
-                if (!confirmClear) return;
-
-                try {
-                    const response = await fetch('{% url "app:clear_chat_history" %}', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token }}'
-                        }
-                    });
-
-                    if (response.ok) {
-                        // Clear chat area
-                        chatArea.innerHTML = '';
-
-                        // Optional: Show empty state
-                        const emptyStateDiv = document.createElement('div');
-                        emptyStateDiv.classList.add('text-center', 'text-gray-500', 'py-10');
-                        emptyStateDiv.textContent = 'Your chat history is now empty.';
-                        chatArea.appendChild(emptyStateDiv);
-                    } else {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || 'Failed to clear chat history');
-                    }
-                } catch (error) {
-                    console.error('Clear history error:', error);
-                    alert(error.message || 'An error occurred while clearing chat history');
-                }
+        if (video.timestamps && video.timestamps.length) {
+            const chips = el('div', 'chips');
+            video.timestamps.forEach(function (ts) {
+                const chip = el('a', 'chip', '▶ ' + (ts.start || '0:00'));
+                chip.href = url + '&t=' + (ts.start_seconds || 0) + 's';
+                chip.target = '_blank';
+                if (ts.description) chip.title = ts.description;
+                chips.appendChild(chip);
             });
+            info.appendChild(chips);
+        }
+        card.appendChild(info);
+        return card;
+    }
 
-            // Quick prompt buttons event listener
-            const quickPromptButtons = document.querySelectorAll('.quick-prompt-btn');
-            quickPromptButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const promptText = this.textContent.trim();
-                    chatInput.value = promptText;
-                    chatForm.dispatchEvent(new Event('submit'));
-                });
+    // placeholderHtml is rendered and escaped by the server (Markdown -> HTML)
+    function addAnswer(placeholderHtml, videos) {
+        hideEmpty();
+        const msg = el('div', 'msg msg-ai');
+        msg.appendChild(header());
+        const body = el('div', 'md');
+        body.dir = 'auto';
+        body.innerHTML = placeholderHtml || '';
+        msg.appendChild(body);
+        if (videos && videos.length) {
+            const list = el('div', 'videos');
+            videos.forEach(function (v) { list.appendChild(videoCard(v)); });
+            msg.appendChild(list);
+        }
+        const actions = el('div', 'msg-actions');
+        const copy = el('button', '', 'Copy');
+        copy.type = 'button';
+        copy.addEventListener('click', function () {
+            navigator.clipboard && navigator.clipboard.writeText(body.innerText).then(function () {
+                copy.textContent = 'Copied';
+                setTimeout(function () { copy.textContent = 'Copy'; }, 1500);
             });
         });
-    </script>
+        actions.appendChild(copy);
+        msg.appendChild(actions);
+        column.appendChild(msg);
+        scrollToBottom();
+    }
 
+    function addError(text) {
+        const msg = el('div', 'msg');
+        msg.appendChild(el('div', 'msg-error', text));
+        column.appendChild(msg);
+        scrollToBottom();
+    }
+
+    function addTyping() {
+        const msg = el('div', 'msg msg-ai');
+        msg.appendChild(header());
+        const typing = el('div', 'typing');
+        const dots = el('span', 'dots');
+        dots.innerHTML = '<span></span><span></span><span></span>';
+        typing.appendChild(dots);
+        const label = el('span', '', 'Thinking…');
+        typing.appendChild(label);
+        msg.appendChild(typing);
+        column.appendChild(msg);
+        scrollToBottom();
+        const steps = ['Thinking…', 'Searching the videos…', 'Reading the transcripts…', 'Writing the answer…'];
+        let i = 0;
+        const timer = setInterval(function () { i = Math.min(i + 1, steps.length - 1); label.textContent = steps[i]; }, 3500);
+        return function () { clearInterval(timer); msg.remove(); };
+    }
+
+    function autoGrow() {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 152) + 'px';
+        sendBtn.disabled = busy || !input.value.trim();
+    }
+
+    async function send(text) {
+        if (busy || !text.trim()) return;
+        busy = true;
+        addUser(text);
+        input.value = '';
+        autoGrow();
+        const stopTyping = addTyping();
+        try {
+            const body = new FormData();
+            body.append('message', text);
+            const response = await fetch('{% url "app:send_message" %}', {
+                method: 'POST', body: body, headers: { 'X-CSRFToken': csrf }
+            });
+            let data = await response.json();
+            stopTyping();
+            if (data && data.error) {
+                addError(data.response || 'Something went wrong.');
+            } else {
+                if (typeof data === 'string') data = JSON.parse(data);
+                addAnswer(data.placeholder, data.videos);
+            }
+        } catch (e) {
+            stopTyping();
+            addError('Network error. Check your connection and try again.');
+        } finally {
+            busy = false;
+            autoGrow();
+        }
+    }
+
+    form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
+    input.addEventListener('input', autoGrow);
+    input.addEventListener('keydown', function (e) {
+        // Enter sends on computers; on phones the Enter key adds a new line
+        const touch = window.matchMedia('(pointer: coarse)').matches;
+        if (e.key === 'Enter' && !e.shiftKey && !touch) { e.preventDefault(); send(input.value); }
+    });
+    document.querySelectorAll('.suggestion').forEach(function (button) {
+        button.addEventListener('click', function () { send(button.textContent.trim()); });
+    });
+
+    document.getElementById('new-chat').addEventListener('click', async function () {
+        if (!confirm('Start a new conversation? The current one will be deleted.')) return;
+        const response = await fetch('{% url "app:clear_chat_history" %}', { method: 'POST', headers: { 'X-CSRFToken': csrf } });
+        if (response.ok) {
+            column.querySelectorAll('.msg').forEach(function (m) { m.remove(); });
+            if (emptyState) emptyState.style.display = '';
+        } else {
+            addError('Could not clear the conversation.');
+        }
+    });
+
+    // Render the saved conversation
+    const history = JSON.parse(document.getElementById('chat-history').textContent || '[]');
+    history.forEach(function (m) {
+        if (m.type === 'human') addUser(m.text || '');
+        else addAnswer(m.placeholder, m.videos);
+    });
+    autoGrow();
+})();
+</script>
 {% endblock content %}

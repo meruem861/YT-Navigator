@@ -3,47 +3,92 @@
 {% block title %}Settings{% endblock title %}
 
 {% block content %}
-<div class="min-h-screen bg-[var(--bg-color)] text-[var(--text-color)] py-8 px-4 sm:px-6 lg:px-8">
-    <div class="w-full max-w-2xl mx-auto bg-[#1E1E1E] shadow-lg rounded-xl overflow-hidden">
-        <div class="p-6">
-            <h2 class="text-xl font-bold text-white mb-2">API keys</h2>
-            <p class="text-sm text-[var(--muted-text-color)] mb-6">
-                The app comes with built-in keys. You can use your own free keys instead:
-                <a href="https://console.groq.com/keys" target="_blank" class="text-rose-500 hover:underline">Groq</a>
-                (chat) and
-                <a href="https://dashboard.cohere.com/api-keys" target="_blank" class="text-rose-500 hover:underline">Cohere</a>
-                (search). Leave a field empty to keep the current key.
-            </p>
-            <form method="post" class="space-y-6">
-                {% csrf_token %}
-                {% for key in keys %}
-                    <div class="space-y-2">
-                        <label for="id_{{ key.name }}" class="block text-sm font-medium text-white">{{ key.label }}</label>
-                        <p class="text-xs text-[var(--muted-text-color)]">{{ key.status }}</p>
-                        <input type="password" name="{{ key.name }}" id="id_{{ key.name }}" autocomplete="off"
-                               placeholder="Paste a new key"
-                               class="appearance-none block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-[#1E1E1E] text-white placeholder-[var(--muted-text-color)] focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent">
-                        {% if key.has_override %}
-                            <button type="submit" name="reset" value="{{ key.name }}"
-                                    class="text-xs text-[var(--muted-text-color)] hover:text-rose-500 underline">
-                                Use the built-in key instead
-                            </button>
+<style>
+    .settings-wrap { max-width: 40rem; margin: 0 auto; }
+    .settings-card { background: #1e1e1e; border: 1px solid #2e2e2e; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1rem; }
+    .settings-card h2 { font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: .25rem; }
+    .settings-hint { font-size: .85rem; color: var(--muted-text-color); line-height: 1.45; }
+    .provider { display: block; border: 1px solid #333; border-radius: .85rem; padding: .85rem 1rem; margin-top: .75rem; cursor: pointer; transition: border-color .15s, background .15s; }
+    .provider:hover { border-color: #555; }
+    .provider input[type=radio] { accent-color: #f43f5e; margin-right: .6rem; }
+    .provider.selected { border-color: #f43f5e; background: rgba(244, 63, 94, .06); }
+    .provider-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .provider-name { color: #fff; font-weight: 500; }
+    .badge { font-size: .7rem; padding: .1rem .5rem; border-radius: 999px; background: #2e2e2e; color: #bbb; white-space: nowrap; }
+    .badge.ok { background: rgba(34, 197, 94, .15); color: #86efac; }
+    .key-field { margin-top: .7rem; }
+    .key-field input { width: 100%; padding: .6rem .8rem; border-radius: .6rem; border: 1px solid #444; background: #151515; color: #fff; font-size: .9rem; }
+    .key-field input:focus { outline: none; border-color: #f43f5e; }
+    .key-meta { display: flex; justify-content: space-between; gap: .5rem; margin-top: .35rem; font-size: .75rem; color: var(--muted-text-color); }
+    .key-meta a, .link-btn { color: #fb7185; }
+    .link-btn { background: none; border: 0; padding: 0; font-size: .75rem; text-decoration: underline; cursor: pointer; }
+    .btn-primary { width: 100%; padding: .7rem; border-radius: .7rem; background: #f43f5e; color: #fff; font-weight: 600; border: 0; }
+    .btn-secondary { width: 100%; padding: .7rem; border-radius: .7rem; background: transparent; color: #fff; border: 1px solid #444; font-weight: 500; }
+</style>
+
+<div class="settings-wrap">
+    <form method="post" id="settings-form">
+        {% csrf_token %}
+
+        <div class="settings-card">
+            <h2>Chat model</h2>
+            <p class="settings-hint">Choose who answers in Chat. Each provider needs its own key.</p>
+            {% for provider in providers %}
+                <label class="provider {% if provider.selected %}selected{% endif %}" data-provider="{{ provider.id }}">
+                    <div class="provider-head">
+                        <span>
+                            <input type="radio" name="CHAT_PROVIDER" value="{{ provider.id }}" {% if provider.selected %}checked{% endif %}>
+                            <span class="provider-name">{{ provider.name }}</span>
+                        </span>
+                        <span class="badge {% if provider.key.is_set %}ok{% endif %}">{% if provider.key.is_set %}Key set{% else %}No key{% endif %}</span>
+                    </div>
+                    <p class="settings-hint" style="margin-top:.35rem">{{ provider.note }}</p>
+                    <div class="key-field">
+                        <input type="password" name="{{ provider.key.name }}" autocomplete="off" placeholder="Paste a new {{ provider.name }} key">
+                        <div class="key-meta">
+                            <span>{{ provider.key.status }}</span>
+                            <a href="{{ provider.key_url }}" target="_blank" rel="noopener">Get a key</a>
+                        </div>
+                        {% if provider.key.has_override %}
+                            <button type="submit" name="reset" value="{{ provider.key.name }}" class="link-btn">Use the built-in key instead</button>
                         {% endif %}
                     </div>
-                {% endfor %}
-                <button type="submit"
-                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-rose-500 hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 transition-colors">
-                    Save
-                </button>
-            </form>
-            <form method="post" action="{% url 'app:test_keys' %}" class="mt-4">
-                {% csrf_token %}
-                <button type="submit"
-                        class="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md text-sm font-medium text-white hover:bg-[#2a2a2a] transition-colors">
-                    Test keys
-                </button>
-            </form>
+                </label>
+            {% endfor %}
         </div>
-    </div>
+
+        <div class="settings-card">
+            <h2>Search</h2>
+            <p class="settings-hint">Cohere finds the right moments in the videos (free trial key).</p>
+            <div class="key-field">
+                <input type="password" name="{{ cohere.name }}" autocomplete="off" placeholder="Paste a new Cohere key">
+                <div class="key-meta">
+                    <span>{{ cohere.status }}</span>
+                    <a href="https://dashboard.cohere.com/api-keys" target="_blank" rel="noopener">Get a key</a>
+                </div>
+                {% if cohere.has_override %}
+                    <button type="submit" name="reset" value="{{ cohere.name }}" class="link-btn">Use the built-in key instead</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <button type="submit" class="btn-primary">Save</button>
+    </form>
+
+    <form method="post" action="{% url 'app:test_keys' %}" style="margin-top:.75rem">
+        {% csrf_token %}
+        <button type="submit" class="btn-secondary">Test keys</button>
+    </form>
 </div>
+
+<script>
+    // Highlight the selected provider card
+    document.querySelectorAll('input[name="CHAT_PROVIDER"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            document.querySelectorAll('.provider').forEach(function (card) {
+                card.classList.toggle('selected', card.dataset.provider === radio.value);
+            });
+        });
+    });
+</script>
 {% endblock content %}

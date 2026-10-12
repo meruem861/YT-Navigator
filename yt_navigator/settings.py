@@ -219,9 +219,25 @@ LOGGING = {
     },
 }
 
-# API keys below are the built-in defaults; users can override them from the Settings page.
+# API keys below are the built-in defaults; users can override them (and the provider) from the Settings page.
+CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "groq")  # groq | gemini | claude
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1")
+
+# Google Gemini through its OpenAI-compatible endpoint (https://aistudio.google.com/apikey, free tier available)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_URL = os.getenv("GEMINI_API_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+GEMINI_INSTANT_LLM = os.getenv("GEMINI_INSTANT_LLM", "")
+GEMINI_POWERFUL_LLM = os.getenv("GEMINI_POWERFUL_LLM", "")
+GEMINI_INSTANT_CANDIDATES = ["gemini-3-flash", "gemini-2.5-flash", "gemini-flash-latest"]
+GEMINI_POWERFUL_CANDIDATES = ["gemini-3-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro"]
+
+# Anthropic Claude (https://console.anthropic.com/settings/keys, paid)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_API_URL = os.getenv("ANTHROPIC_API_URL", "https://api.anthropic.com/v1")
+CLAUDE_INSTANT_LLM = os.getenv("CLAUDE_INSTANT_LLM", "claude-haiku-5-5")
+CLAUDE_POWERFUL_LLM = os.getenv("CLAUDE_POWERFUL_LLM", "claude-opus-5-5")
 
 # Cohere (https://dashboard.cohere.com/) provides embeddings and reranking, so no ML model runs on the device
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")

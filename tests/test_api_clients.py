@@ -5,10 +5,8 @@ import json
 import httpx
 import pytest
 
-from app.services import (
-    cohere_client,
-    groq_client,
-)
+from app.services import cohere_client
+from app.services import llm_client as groq_client
 
 
 @pytest.fixture

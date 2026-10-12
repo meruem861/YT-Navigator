@@ -1,6 +1,7 @@
 """Chatbot views."""
 
 import traceback
+from dataclasses import asdict
 
 import structlog
 from asgiref.sync import sync_to_async
@@ -21,7 +22,7 @@ async def chatbot_page(request):
     channel = await sync_to_async(lambda: request.user.channel)()
     user_id = await sync_to_async(lambda: str(request.user.id))()
 
-    chat_history = await get_agent().get_chat_history(user_id)
+    chat_history = [asdict(message) for message in await get_agent().get_chat_history(user_id)]
 
     try:
         return render(

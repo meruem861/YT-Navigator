@@ -61,7 +61,7 @@ def test_error_message_is_shown_once(logged_in_client):
 
 def test_test_keys_reports_each_service(logged_in_client, monkeypatch):
     from app.services.cohere_client import CohereError
-    from app.services.groq_client import GroqError
+    from app.services.llm_client import LLMError
 
     async def models(self):
         return ["openai/gpt-oss-20b", "whisper-large-v3"]
@@ -69,28 +69,66 @@ def test_test_keys_reports_each_service(logged_in_client, monkeypatch):
     async def bad_embed(self, texts, input_type):
         raise CohereError("invalid api token")
 
-    monkeypatch.setattr("app.services.groq_client._models_cache", {})
-    monkeypatch.setattr("app.services.groq_client.GroqClient.list_models", models)
+    async def key(self):
+        return "k"
+
+    monkeypatch.setattr("app.services.llm_client._models_cache", {})
+    monkeypatch.setattr("app.services.llm_client.GroqClient.list_models", models)
+    monkeypatch.setattr("app.services.llm_client.BaseChatClient.api_key", key)
     monkeypatch.setattr("app.services.cohere_client.CohereClient.embed", bad_embed)
 
     page = logged_in_client.post("/settings/test-keys/", follow=True).content.decode()
-    assert "Groq key: works (chat models: openai/gpt-oss-20b, openai/gpt-oss-20b)" in page
+    assert "Groq key: works (models: openai/gpt-oss-20b, openai/gpt-oss-20b)" in page
     assert "Cohere key: not working (invalid api token)" in page
 
     async def groq_error(self):
-        raise GroqError("Invalid API Key")
+        raise LLMError("Invalid API Key")
 
-    monkeypatch.setattr("app.services.groq_client._models_cache", {})
-    monkeypatch.setattr("app.services.groq_client.GroqClient.list_models", groq_error)
+    monkeypatch.setattr("app.services.llm_client._models_cache", {})
+    monkeypatch.setattr("app.services.llm_client.GroqClient.list_models", groq_error)
     page = logged_in_client.post("/settings/test-keys/", follow=True).content.decode()
     assert "Groq key: not working (Invalid API Key)" in page
 
 
+def test_choose_provider_in_settings(logged_in_client):
+    from app.services.app_settings import get_value
+
+    page = logged_in_client.get("/settings/").content.decode()
+    assert "Google Gemini" in page and "Anthropic Claude" in page
+    logged_in_client.post("/settings/", {"CHAT_PROVIDER": "claude", "ANTHROPIC_API_KEY": "sk-ant-xyz9"})
+    assert get_value("CHAT_PROVIDER") == "claude"
+    assert get_value("ANTHROPIC_API_KEY") == "sk-ant-xyz9"
+    logged_in_client.post("/settings/", {"CHAT_PROVIDER": "nope"})
+    assert get_value("CHAT_PROVIDER") == "claude"
+
+
+def test_chat_page_embeds_history_safely(logged_in_client):
+    import json as _json
+
+    from app.models import (
+        ChatHistoryMessage,
+        User,
+    )
+
+    user = User.objects.get(username="bob")
+    ChatHistoryMessage.objects.create(user=user, role="human", content="hi </script><b>x</b>")
+    ChatHistoryMessage.objects.create(
+        user=user, role="ai", content=_json.dumps({"placeholder": "**yo** <img src=x onerror=alert(1)>", "videos": []})
+    )
+    page = logged_in_client.get("/chatbot/").content.decode()
+    assert "</script><b>x</b>" not in page  # json_script escapes it
+    data = _json.loads(page.split('id="chat-history" type="application/json">')[1].split("</script>")[0])
+    assert data[0]["text"] == "hi </script><b>x</b>"
+    assert "<strong>yo</strong>" in data[1]["placeholder"] and "<img" not in data[1]["placeholder"]
+
+
 def test_choose_model_prefers_candidates_then_any_chat_model():
-    from app.services.groq_client import choose_model
+    from app.services.llm_client import choose_model
 
     available = ["whisper-large-v3", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
     assert choose_model(available, "", ["llama-3.1-8b-instant", "openai/gpt-oss-120b"]) == "openai/gpt-oss-120b"
     assert choose_model(available, "llama-3.3-70b-versatile", ["openai/gpt-oss-120b"]) == "llama-3.3-70b-versatile"
-    assert choose_model(available, "", ["retired-model"]) == "llama-3.3-70b-versatile"
-    assert choose_model(["whisper-large-v3"], "", []) is None
+    excluded = ("whisper",)
+    assert choose_model(available, "", ["retired-model"], excluded=excluded) == "openai/gpt-oss-120b"
+    assert choose_model(available, "", ["retired-model"], ("llama",), excluded) == "llama-3.3-70b-versatile"
+    assert choose_model(["whisper-large-v3"], "", [], excluded=excluded) is None

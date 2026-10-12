@@ -42,7 +42,7 @@ from app.services.agent.prompts import (
     ROUTER_FORMAT_INSTRUCTIONS,
     SYSTEM_PROMPT_TEMPLATE,
 )
-from app.services.groq_client import GroqClient
+from app.services.llm_client import get_chat_client
 from app.services.vector_database.tools import (
     SQLTools,
     VectorDatabaseTools,
@@ -65,6 +65,7 @@ class ChatMessage:
     type: str
     placeholder: str
     videos: List[Dict[str, Any]] = field(default_factory=list)
+    text: str = ""
 
 
 def _extract_json(text: str) -> Optional[dict]:
@@ -124,15 +125,22 @@ def parse_answer(text: str) -> Dict[str, Any]:
 
 def render_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
     """Render the Markdown answer to HTML for the chat page."""
-    return {"placeholder": markdown(answer.get("placeholder") or ""), "videos": answer.get("videos") or []}
+    # safe_mode escapes any raw HTML the model writes, so it is shown as text instead of being run in the page
+    html = markdown(answer.get("placeholder") or "", safe_mode="escape", extras=["break-on-newline"])
+    return {"placeholder": html, "videos": answer.get("videos") or []}
 
 
 class ChannelAgent:
     """Chat assistant for the channel connected by the user."""
 
-    def __init__(self, client: Optional[GroqClient] = None):
-        """Initialize the agent."""
-        self.client = client or GroqClient()
+    def __init__(self, client=None):
+        """Initialize the agent.
+
+        Args:
+            client: Chat client to use; by default the provider selected in Settings, resolved per message.
+        """
+        self._fixed_client = client
+        self.client = client
         self.tools = [VectorDatabaseTools.tool(), SQLTools.tool()]
 
     # ---------------------------------------------------------------- history
@@ -163,7 +171,9 @@ class ChannelAgent:
         history = []
         for message in messages:
             if message.role == "human":
-                history.append(ChatMessage(type="human", placeholder=linebreaks(escape(message.content))))
+                history.append(
+                    ChatMessage(type="human", placeholder=linebreaks(escape(message.content)), text=message.content)
+                )
             else:
                 rendered = render_answer(parse_answer(message.content))
                 history.append(ChatMessage(type="ai", placeholder=rendered["placeholder"], videos=rendered["videos"]))
@@ -234,7 +244,11 @@ class ChannelAgent:
             if not tool_calls:
                 return reply.get("content") or ""
 
-            messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": tool_calls})
+            assistant = {"role": "assistant", "content": reply.get("content") or "", "tool_calls": tool_calls}
+            if "_claude_content" in reply:
+                # Claude needs its original content blocks (thinking, tool_use) sent back unchanged
+                assistant["_claude_content"] = reply["_claude_content"]
+            messages.append(assistant)
             for call in tool_calls:
                 function = call.get("function", {})
                 logger.info("Calling tool", tool=function.get("name"), arguments=function.get("arguments"))
@@ -255,6 +269,7 @@ class ChannelAgent:
             str: JSON {"placeholder": html, "videos": [...]} for the chat page.
         """
         logger.info("Processing message", message=message)
+        self.client = self._fixed_client or await get_chat_client()
         channel_info = await channel.pretty_str()
 
         history = await self._load_history(user, REPLY_HISTORY)
