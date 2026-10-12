@@ -8,7 +8,6 @@ from typing import (
     Optional,
 )
 
-import scrapetube
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -65,13 +64,9 @@ def validate_channel_link(channel_link: str) -> str:
         logger.error("Invalid YouTube channel link format", channel_link=channel_link)
         raise
 
-    try:
-        scrapetube.get_channel(channel_username)
-        logger.info("Channel validated successfully", channel_username=channel_username)
-        return channel_username
-    except Exception as e:
-        logger.error("Channel validation failed", channel_username=channel_username, error=e)
-        raise ValueError(f"Invalid YouTube channel: {str(e)}") from e
+    # The channel's existence is checked when its page is fetched (ChannelScraper.get_channel_data)
+    logger.info("Channel link validated", channel_username=channel_username)
+    return channel_username
 
 
 def chunk_generator(items: List[Any], chunk_size: int):

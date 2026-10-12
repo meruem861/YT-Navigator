@@ -230,7 +230,26 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "embed-v4.0")
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", 96))  # Cohere accepts up to 96 texts per call
 RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "rerank-v3.5")
 
-INSTANT_LLM = os.getenv("INSTANT_LLM", "llama-3.1-8b-instant")
-POWERFUL_LLM = os.getenv("POWERFUL_LLM", "openai/gpt-oss-120b")
+# Groq retires models regularly, so the app picks, at runtime, the first of these candidates that the key can use
+# (and any available chat model as a last resort). INSTANT_LLM / POWERFUL_LLM force a specific model.
+INSTANT_LLM = os.getenv("INSTANT_LLM", "")
+POWERFUL_LLM = os.getenv("POWERFUL_LLM", "")
+INSTANT_LLM_CANDIDATES = [
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-120b",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+]
+# Used with tool calling: keep models that support it
+POWERFUL_LLM_CANDIDATES = [
+    "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "moonshotai/kimi-k2-instruct-0905",
+    "moonshotai/kimi-k2-instruct",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-20b",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+]
 
 SCRAPER_WORKERS_NUM = int(os.getenv("SCRAPER_WORKERS_NUM", min(os.cpu_count() or 1, 4)))

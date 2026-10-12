@@ -23,6 +23,9 @@ class FakeGroq:
         self.replies = list(replies)
         self.requests = []
 
+    async def pick_model(self, kind):
+        return f"{kind}-model"
+
     async def chat(self, model, messages, tools=None, json_mode=False, temperature=0.0):
         self.requests.append({"model": model, "messages": [dict(m) for m in messages], "tools": tools})
         return self.replies.pop(0)

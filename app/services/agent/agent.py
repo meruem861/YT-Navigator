@@ -185,9 +185,8 @@ class ChannelAgent:
         system = ROUTE_QUERY_SYSTEM_PROMPT.format(
             channel=channel_info, tools=tools_description, format_instructions=ROUTER_FORMAT_INSTRUCTIONS
         )
-        reply = await self.client.chat(
-            settings.INSTANT_LLM, [{"role": "system", "content": system}, *history], json_mode=True
-        )
+        model = await self.client.pick_model("instant")
+        reply = await self.client.chat(model, [{"role": "system", "content": system}, *history], json_mode=True)
         content = reply.get("content") or ""
         answer = (_extract_json(content) or {}).get("answer")
         if answer not in ("Yes", "No", "Not relevant"):
@@ -201,9 +200,8 @@ class ChannelAgent:
         system = NON_TOOL_CALLS_SYSTEM_PROMPT.format(
             channel=str(channel), user=str(user), format_instructions=ANSWER_FORMAT_INSTRUCTIONS
         )
-        reply = await self.client.chat(
-            settings.INSTANT_LLM, [{"role": "system", "content": system}, *history], json_mode=True
-        )
+        model = await self.client.pick_model("instant")
+        reply = await self.client.chat(model, [{"role": "system", "content": system}, *history], json_mode=True)
         return reply.get("content") or ""
 
     async def _run_tool(self, name: str, arguments: str) -> str:
@@ -228,9 +226,10 @@ class ChannelAgent:
             channel=channel_info, user=str(user), format_instructions=ANSWER_FORMAT_INSTRUCTIONS
         )
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system}, *history]
+        model = await self.client.pick_model("powerful")
 
         for _ in range(MAX_TOOL_ROUNDS):
-            reply = await self.client.chat(settings.POWERFUL_LLM, messages, tools=self.tools)
+            reply = await self.client.chat(model, messages, tools=self.tools)
             tool_calls = reply.get("tool_calls") or []
             if not tool_calls:
                 return reply.get("content") or ""
@@ -244,7 +243,7 @@ class ChannelAgent:
 
         # Too many tool rounds: ask for a final answer with what was found
         messages.append({"role": "user", "content": "Give your final answer now using the results above."})
-        reply = await self.client.chat(settings.POWERFUL_LLM, messages)
+        reply = await self.client.chat(model, messages)
         return reply.get("content") or ""
 
     # ---------------------------------------------------------------- entry point

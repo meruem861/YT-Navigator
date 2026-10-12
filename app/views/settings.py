@@ -52,14 +52,12 @@ def settings_view(request):
 
 
 async def _check_groq() -> tuple[bool, str]:
+    client = GroqClient()
     try:
-        models = await GroqClient().list_models()
+        instant, powerful = await client.pick_model("instant"), await client.pick_model("powerful")
     except Exception as e:
         return False, f"Groq key: not working ({e})"
-    missing = [m for m in (settings.INSTANT_LLM, settings.POWERFUL_LLM) if m not in models]
-    if missing:
-        return False, f"Groq key: works, but these models are not available: {', '.join(missing)}"
-    return True, "Groq key: works"
+    return True, f"Groq key: works (chat models: {instant}, {powerful})"
 
 
 async def _check_cohere() -> tuple[bool, str]:

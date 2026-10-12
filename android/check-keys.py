@@ -1,6 +1,6 @@
 """Check the built-in API keys (DEFAULT_GROQ_API_KEY / DEFAULT_COHERE_API_KEY) without printing them.
 
-Fails if a key is set but rejected, or if the chat models configured in yt_navigator/settings.py are unavailable.
+Fails if a key is set but rejected; reports which Groq chat models the app will use.
 """
 
 import json
@@ -16,7 +16,12 @@ SETTINGS = (Path(__file__).resolve().parent.parent / "yt_navigator" / "settings.
 
 def default_setting(name: str) -> str:
     """Return the default value of a setting defined as NAME = os.getenv("NAME", "default")."""
-    return re.search(rf'{name} = os.getenv\("{name}", "([^"]+)"\)', SETTINGS).group(1)
+    return re.search(rf'{name} = os.getenv\("{name}", "([^"]*)"\)', SETTINGS).group(1)
+
+
+def list_setting(name: str) -> list[str]:
+    """Return the strings of a list setting defined as NAME = [ "a", "b", ... ]."""
+    return re.findall(r'"([^"]+)"', re.search(rf"{name} = \[(.*?)\]", SETTINGS, re.DOTALL).group(1))
 
 
 def request(url: str, key: str, payload: dict | None = None) -> dict:
@@ -28,22 +33,18 @@ def request(url: str, key: str, payload: dict | None = None) -> dict:
 
 
 def check_groq(key: str) -> bool:
-    """Check the Groq key and that the configured chat models are available to it."""
+    """Check the Groq key and report which chat models the app will pick."""
     try:
         models = {m["id"] for m in request("https://api.groq.com/openai/v1/models", key)["data"]}
     except urllib.error.HTTPError as e:
         print(f"Groq key: REJECTED (HTTP {e.code}: {e.read()[:200].decode(errors='replace')})")
         return False
     print("Groq key: valid")
-    ok = True
-    for setting in ("INSTANT_LLM", "POWERFUL_LLM"):
-        model = default_setting(setting)
-        available = model in models
-        ok = ok and available
-        print(f"  {setting} = {model}: {'available' if available else 'NOT AVAILABLE'}")
-    if not ok:
-        print("  Available models:", ", ".join(sorted(models)))
-    return ok
+    for kind in ("INSTANT_LLM", "POWERFUL_LLM"):
+        candidates = [m for m in [default_setting(kind)] + list_setting(f"{kind}_CANDIDATES") if m]
+        chosen = next((m for m in candidates if m in models), None)
+        print(f"  {kind}: {chosen or 'no preferred model available (the app will use any chat model)'}")
+    return bool(models)
 
 
 def check_cohere(key: str) -> bool:

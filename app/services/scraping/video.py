@@ -55,8 +55,12 @@ class VideoScraper:
                 return None
 
             published_timestamp = video.get("publishedTimeText", {}).get("simpleText", "")
-            # Unparsable dates fall back to now, so the video is still saved
-            published_at = (get_exact_time(published_timestamp) if published_timestamp else None) or timezone.now()
+            # Exact date when known (RSS feed); unparsable relative dates fall back to now, so the video is saved
+            published_at = (
+                video.get("published_at")
+                or (get_exact_time(published_timestamp) if published_timestamp else None)
+                or timezone.now()
+            )
 
             metadata = {
                 "videoId": video_id,

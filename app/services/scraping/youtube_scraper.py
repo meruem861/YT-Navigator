@@ -14,7 +14,6 @@ from typing import (
     Tuple,
 )
 
-import scrapetube
 import structlog
 
 from app.models import Channel
@@ -26,6 +25,7 @@ from app.services.scraping.utils import (
     validate_channel_link,
 )
 from app.services.scraping.video import VideoScraper
+from app.services.scraping.video_list import list_channel_videos
 
 logger = structlog.get_logger(__name__)
 
@@ -114,7 +114,7 @@ class YoutubeScraper(BaseYoutubeScraper):
             self.transcript_scraper.blocked_count = 0
 
             # Get videos from channel
-            scrape_results = list(scrapetube.get_channel(channel_username=channel_username, limit=videos_limit))
+            scrape_results = list_channel_videos(channel_username, channel_id, videos_limit)
 
             if not scrape_results:
                 logger.warning("No videos found in channel", channel_username=channel_username)
